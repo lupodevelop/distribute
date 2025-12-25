@@ -6,7 +6,7 @@
 ///    and heartbeats (via `start_service`, `request_vote`, etc.).
 /// 2. **Stateless Deterministic**: A simple function (`elect`) that picks a leader
 ///    based on the lexicographically largest node among the alive members.
-import cluster/membership
+import distribute/cluster/membership
 import gleam/list
 import gleam/option
 import gleam/string

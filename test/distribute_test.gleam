@@ -1,18 +1,18 @@
-import cluster
-import connection_pool
+import distribute/cluster
+import distribute/connection_pool
 import gleam/dynamic
 import gleam/list
 import gleam/option
 import gleam/string
 import gleeunit
 import gleeunit/should
-import groups
-import log
-import messaging
-import monitor
-import node_builder
-import registry
-import remote_call
+import distribute/groups
+import distribute/log
+import distribute/messaging
+import distribute/monitor
+import distribute/node_builder
+import distribute/registry
+import distribute/remote_call
 
 pub fn main() -> Nil {
   // Disable logging during tests to keep output clean
@@ -252,8 +252,8 @@ pub fn remote_call_timeout_returns_timeout_error_test() {
 // Membership and Raft-lite tests
 // ============================================================================
 
-import cluster/membership
-import election/raft_lite
+import distribute/cluster/membership
+import distribute/election/raft_lite
 
 pub fn membership_start_stop_test() {
   // Start the membership service briefly and ensure it doesn't crash
@@ -1217,7 +1217,7 @@ pub fn cluster_workflow_ping_and_nodes_test() {
 // Health Module Tests
 // ============================================================================
 
-import cluster/health
+import distribute/cluster/health
 
 pub fn health_is_healthy_test() {
   // In test environment with no connected nodes
@@ -1279,7 +1279,7 @@ pub fn health_node_health_types_test() {
 // Gossip Module Tests
 // ============================================================================
 
-import cluster/gossip
+import distribute/cluster/gossip
 
 pub fn gossip_node_status_types_test() {
   // Test all NodeStatus variants can be constructed

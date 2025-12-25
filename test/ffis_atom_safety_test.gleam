@@ -1,9 +1,9 @@
 import gleeunit
 import gleeunit/should
-import groups
-import log
-import registry
-import settings
+import distribute/groups
+import distribute/log
+import distribute/registry
+import distribute/settings
 
 @external(erlang, "erlang", "self")
 fn groups_self_ffi() -> groups.Pid

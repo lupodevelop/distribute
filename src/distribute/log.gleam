@@ -4,7 +4,7 @@
 /// metadata support, and correlation IDs for distributed tracing.
 import gleam/list
 import gleam/option
-import settings
+import distribute/settings
 
 // Dynamic type used for ad-hoc FFI returns
 type Dynamic

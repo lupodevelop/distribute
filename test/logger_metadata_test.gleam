@@ -1,6 +1,6 @@
 import gleeunit
 import gleeunit/should
-import log
+import distribute/log
 
 pub fn main() -> Nil {
   gleeunit.main()

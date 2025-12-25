@@ -8,7 +8,7 @@
 /// eventually resolve conflicts when the partition heals.
 import gleam/option.{type Option, None, Some}
 import gleam/string
-import log
+import distribute/log
 
 pub type RegisterError {
   /// Name is already registered by another process.

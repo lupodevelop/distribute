@@ -1,7 +1,7 @@
-import cluster
-import cluster/membership
+import distribute/cluster
+import distribute/cluster/membership
 import gleam/io
-import messaging
+import distribute/messaging
 
 pub fn start() -> Nil {
   let _ = cluster.start_node("app_b@127.0.0.1", "cookie_integ")

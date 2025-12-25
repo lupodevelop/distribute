@@ -41,7 +41,7 @@ gleam add distribute
 ### 1. Start a Distributed Node
 
 ```gleam
-import cluster
+import distribute/cluster
 import gleam/io
 import gleam/string
 
@@ -57,7 +57,7 @@ pub fn main() {
 ### 2. Connect to Another Node
 
 ```gleam
-import cluster
+import distribute/cluster
 import gleam/io
 import gleam/string
 
@@ -72,9 +72,9 @@ pub fn connect_peer() {
 ### 3. Register and Send Messages Globally
 
 ```gleam
-import registry
-import messaging
-import monitor
+import distribute/registry
+import distribute/messaging
+import distribute/monitor
 
 pub fn register_and_send() {
   // Register current process globally
@@ -89,8 +89,8 @@ pub fn register_and_send() {
 ### 4. Process Groups
 
 ```gleam
-import groups
-import monitor
+import distribute/groups
+import distribute/monitor
 
 pub fn use_groups() {
   let pid = monitor.self()
@@ -109,7 +109,7 @@ pub fn use_groups() {
 ### 5. SWIM Membership Service
 
 ```gleam
-import cluster/membership
+import distribute/cluster/membership
 
 pub fn use_membership() {
   // Start the background membership service (probe every 500ms)
@@ -133,7 +133,7 @@ pub fn use_membership() {
 ### 6. Leader Election (Raft-lite)
 
 ```gleam
-import election/raft_lite
+import distribute/election/raft_lite
 import gleam/io
 
 pub fn elect_leader() {
@@ -147,13 +147,13 @@ pub fn elect_leader() {
 ### 7. Remote Procedure Calls
 
 ```gleam
-import remote_call
+import distribute/remote_call
 import gleam/io
 import gleam/string
 
 pub fn call_remote() {
   // Call erlang:node() on a remote node
-  case remote_call.call("other@host", "erlang", "node", []) {
+  case remote_call.call("other@host", "erlang", "node", [], []) {
     Ok(result) -> io.println("Remote node name: " <> string.inspect(result))
     Error(remote_call.RpcBadRpc(reason)) -> io.println("RPC failed: " <> reason)
     Error(_) -> io.println("RPC error")
@@ -165,16 +165,16 @@ pub fn call_remote() {
 
 | Module | Description |
 |--------|-------------|
-| `cluster` | Node management: start, connect, ping, list nodes |
-| `registry` | Global process registration (uses `:global`) |
-| `messaging` | Send messages to PIDs or global names |
-| `groups` | Process groups with join/leave/broadcast (uses `:pg`) |
-| `monitor` | Monitor processes and nodes |
-| `remote_call` | RPC to remote nodes |
-| `cluster/membership` | SWIM-like membership with gossip and failure detection |
-| `cluster/gossip` | Gossip protocol for membership state propagation |
-| `cluster/health` | Health checks for nodes and cluster |
-| `election/raft_lite` | Lightweight leader election with term-based voting |
+| `distribute/cluster` | Node management: start, connect, ping, list nodes |
+| `distribute/registry` | Global process registration (uses `:global`) |
+| `distribute/messaging` | Send messages to PIDs or global names |
+| `distribute/groups` | Process groups with join/leave/broadcast (uses `:pg`) |
+| `distribute/monitor` | Monitor processes and nodes |
+| `distribute/remote_call` | RPC to remote nodes |
+| `distribute/cluster/membership` | SWIM-like membership with gossip and failure detection |
+| `distribute/cluster/gossip` | Gossip protocol for membership state propagation |
+| `distribute/cluster/health` | Health checks for nodes and cluster |
+| `distribute/election/raft_lite` | Lightweight leader election with term-based voting |
 
 > **Note**: `cluster.connect_bool` is kept for backward compatibility but is deprecated. Please prefer the `Result`-returning `cluster.connect` which provides structured error handling.
 
@@ -200,27 +200,21 @@ This script starts 3 local Erlang nodes, runs the membership service, and verifi
 
 ```
 src/
-├── cluster.gleam           # Node management
-├── cluster_ffi.erl         # Erlang FFI for cluster
-├── registry.gleam          # Global registry
-├── registry_ffi.erl
-├── messaging.gleam         # Cross-node messaging
-├── messaging_ffi.erl
-├── groups.gleam            # Process groups
-├── groups_ffi.erl
-├── monitor.gleam           # Process/node monitoring
-├── monitor_ffi.erl
-├── remote_call.gleam       # RPC
-├── rpc_ffi.erl
-├── cluster/
-│   ├── membership.gleam    # SWIM-like membership
-│   ├── membership_ffi.erl
-│   ├── gossip.gleam        # Gossip protocol
-│   ├── gossip_ffi.erl
-│   └── health.gleam        # Health checks
-└── election/
-    ├── raft_lite.gleam     # Leader election
-    └── raft_ffi.erl
+├── distribute.gleam        # Top-level module
+├── distribute/
+│   ├── cluster.gleam       # Node management
+│   ├── registry.gleam      # Global registry
+│   ├── messaging.gleam     # Cross-node messaging
+│   ├── groups.gleam        # Process groups
+│   ├── monitor.gleam       # Process/node monitoring
+│   ├── remote_call.gleam   # RPC
+│   ├── cluster/
+│   │   ├── membership.gleam # SWIM-like membership
+│   │   ├── gossip.gleam     # Gossip protocol
+│   │   └── health.gleam     # Health checks
+│   └── election/
+│       └── raft_lite.gleam  # Leader election
+└── *_ffi.erl               # Erlang FFI files (in src root)
 ```
 
 ## Design Philosophy
@@ -257,6 +251,12 @@ pub fn main() {
   // Secure default — don't allow uncontrolled atom creation
   settings.set_allow_atom_creation(False)
 
+  // Prdistribute/settings
+
+pub fn main() {
+  // Secure default — don't allow uncontrolled atom creation
+  settings.set_allow_atom_creation(False)
+
   // Prefer crypto-based correlation ids
   settings.set_use_crypto_ids(True)
 }
@@ -277,8 +277,8 @@ This library provides a structured logging helper `log` with metadata and correl
 Example:
 
 ```gleam
-import log
-import settings
+import distribute/log
+import distribute/settings
 
 pub fn main() {
   settings.set_use_crypto_ids(True)
@@ -297,13 +297,7 @@ Example with a custom timeout:
 ```gleam
 import gleam/io
 import gleam/string
-import remote_call
-
-pub fn main() {
-  case remote_call.call_with_timeout("other@host", "erlang", "node", [], 15_000) {
-    Ok(v) -> io.println(string.inspect(v))
-    Error(err) -> io.println("RPC error: " <> string.inspect(err))
-  }
+import distribute/
 }
 ```
 

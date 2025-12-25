@@ -21,7 +21,7 @@ All scripts:
 A minimal “two node” end-to-end check:
 
 - starts node A, registers a global name (`calculator`)
-- starts node B, connects to node A, sends a message via `messaging.send_global`
+- starts node B, connects to node A, sends a message via `distribute/messaging.send_global`
 - verifies node A received the message
 
 Run:

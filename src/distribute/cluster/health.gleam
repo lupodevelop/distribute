@@ -2,7 +2,7 @@
 ///
 /// This module provides functions to check the health of the local node
 /// and the overall cluster, based on membership status and connectivity.
-import cluster/membership
+import distribute/cluster/membership
 import gleam/list
 import gleam/option
 

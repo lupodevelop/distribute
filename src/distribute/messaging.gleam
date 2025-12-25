@@ -7,7 +7,7 @@
 /// across the cluster.
 import gleam/list
 import gleam/string
-import log
+import distribute/log
 
 pub type SendError {
   /// The globally registered name was not found.

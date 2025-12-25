@@ -1,7 +1,7 @@
-import cluster
+import distribute/cluster
 import gleam/io
 import gleam/string
-import monitor
+import distribute/monitor
 
 pub fn start() -> Nil {
   // Start this node in distributed mode (short name)
