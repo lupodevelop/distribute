@@ -1,7 +1,7 @@
 name = "distribute"
 version = "1.0.0"
 description = "BEAM distributed computing primitives for Gleam. Type-safe wrappers for Erlang distribution, clustering, global registry, process groups, and RPC."
-license = "MIT"
+licences = ["MIT"]
 repository = { type = "github", user = "lupodevelop", repo = "distribute" }
 
 target = "erlang"
