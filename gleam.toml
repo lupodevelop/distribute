@@ -1,0 +1,20 @@
+name = "distribute"
+version = "1.0.0"
+description = "BEAM distributed computing primitives for Gleam. Type-safe wrappers for Erlang distribution, clustering, global registry, process groups, and RPC."
+license = "MIT"
+repository = { type = "github", user = "lupodevelop", repo = "distribute" }
+
+target = "erlang"
+
+[documentation]
+pages = [
+	{ title = "Examples", path = "examples.html", source = "./examples/README.md" },
+	{ title = "Two Nodes", path = "examples-two-nodes.html", source = "./examples/two_nodes/README.md" },
+	{ title = "Two Nodes App", path = "examples-two-nodes-app.html", source = "./examples/two_nodes_app/README.md" },
+]
+
+[dependencies]
+gleam_stdlib = ">= 0.44.0 and < 2.0.0"
+
+[dev-dependencies]
+gleeunit = ">= 1.0.0 and < 2.0.0"
