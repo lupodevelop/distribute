@@ -1,0 +1,10 @@
+[package]
+name = "two_nodes_app"
+version = "0.1.0"
+description = "Lightweight example project demonstrating two-node usage of the local `distribute` library."
+license = "MIT"
+authors = ["You <you@example.com>"]
+
+[project]
+language = "gleam"
+target = "erlang"
