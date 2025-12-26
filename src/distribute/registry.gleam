@@ -6,9 +6,8 @@
 /// When a process is registered globally, it can be looked up by name from any
 /// node in the cluster. If a network partition occurs, the registry will
 /// eventually resolve conflicts when the partition heals.
-import gleam/option.{type Option, None, Some}
-import gleam/string
 import distribute/log
+import gleam/string
 
 pub type RegisterError {
   /// Name is already registered by another process.
@@ -144,12 +143,12 @@ pub fn unregister(name: String) -> Result(Nil, RegisterError) {
 }
 
 /// Look up a globally registered process by name.
-/// Returns Some(pid) if found, None otherwise.
-pub fn whereis(name: String) -> Option(Pid) {
+/// Returns Ok(pid) if found, Error(Nil) otherwise.
+pub fn whereis(name: String) -> Result(Pid, Nil) {
   log.debug("Resolving global name", [#("name", name)])
   let res = whereis_ffi(name)
   case is_pid(res) {
-    True -> Some(dynamic_to_pid(res))
-    False -> None
+    True -> Ok(dynamic_to_pid(res))
+    False -> Error(Nil)
   }
 }
