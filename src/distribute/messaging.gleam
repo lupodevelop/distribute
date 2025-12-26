@@ -85,6 +85,9 @@ pub fn is_network_error(reason: String) -> Bool {
 }
 
 /// Send a message to a process (local or remote).
+///
+/// @deprecated Use `send_typed` with a `Subject(BitArray)` and codec for type-safe messaging.
+/// This function bypasses all type checking and encoding validation.
 pub fn send(pid: Pid, msg: a) -> Nil {
   send_ffi(pid, msg)
   Nil
@@ -112,6 +115,9 @@ pub fn send_typed(
 
 /// Send a message to a globally registered name.
 /// Returns Ok(Nil) if successful, Error if name not found or send failed.
+///
+/// @deprecated Use `send_global_typed` with a codec for type-safe messaging.
+/// This function bypasses all type checking and encoding validation.
 pub fn send_global(name: String, msg: a) -> Result(Nil, SendError) {
   log.debug("Sending message to global name", [#("name", name)])
   let res = send_global_ffi(name, msg)

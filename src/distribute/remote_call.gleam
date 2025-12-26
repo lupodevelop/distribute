@@ -58,6 +58,9 @@ fn to_bitarray(value: Dynamic) -> BitArray
 
 /// Perform a remote procedure call on a node.
 /// Calls module:function(args) on the given node.
+///
+/// @deprecated Use `call_typed` or `call_typed_with_timeout` with codecs for type-safe RPC.
+/// This function bypasses all type checking and encoding validation.
 pub fn call(
   node: String,
   module: String,
@@ -82,6 +85,9 @@ pub fn call(
 ///
 /// Uses a default timeout of 5000ms
 /// Call with an explicit timeout in milliseconds
+///
+/// @deprecated Use `call_typed_with_timeout` with codecs for type-safe RPC.
+/// This function bypasses all type checking and encoding validation.
 pub fn call_with_timeout(
   node: String,
   module: String,
