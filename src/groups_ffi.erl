@@ -1,6 +1,6 @@
 %% Groups FFI (wrapper around :pg) for Gleam distribute library
 -module(groups_ffi).
--export([join/2, leave/2, members/1, broadcast/2,
+-export([join/2, leave/2, members/1, broadcast/2, broadcast_binary/2,
          is_ok_atom/1, get_error_reason/1, unwrap_members/1]).
 
 join(Group, Pid) when is_pid(Pid) ->
@@ -48,6 +48,32 @@ broadcast(Group, Msg) ->
             end;
         Error -> Error
     end.
+
+%% Broadcast binary message to all members of a group (for typed messaging)
+broadcast_binary(Group, BinaryMsg) when is_binary(BinaryMsg) ->
+    case to_atom_safe(Group) of
+        {ok, G} ->
+            case try_pg_get_members(G) of
+                {ok, Members} ->
+                    %% Validate binary size (max 10MB for safety)
+                    case byte_size(BinaryMsg) > 10485760 of
+                        true -> {error, <<"message_too_large">>};
+                        false ->
+                            %% Filter out dead processes before sending
+                            AliveMembers = lists:filter(fun is_process_alive/1, Members),
+                            try
+                                lists:foreach(fun(Pid) -> Pid ! BinaryMsg end, AliveMembers),
+                                ok
+                            catch
+                                _:Reason -> {error, iolist_to_binary(io_lib:format("broadcast_failed: ~p", [Reason]))}
+                            end
+                    end;
+                Error -> Error
+            end;
+        Error -> Error
+    end;
+broadcast_binary(_Group, _Msg) ->
+    {error, <<"invalid_binary">>}.
 
 %% Helpers for Gleam FFI
 is_ok_atom(ok) -> true;
