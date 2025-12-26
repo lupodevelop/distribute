@@ -7,9 +7,21 @@
 [![Package Version](https://img.shields.io/hexpm/v/distribute)](https://hex.pm/packages/distribute)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/distribute/)
 
-**Distribute** brings the full power of Erlang's distributed computing to Gleam, with a type-safe and idiomatic API.
+**Distribute** brings the full power of Erlang's distributed computing to Gleam,
+with an idiomatic and strongly-typed API at the Gleam level.
 
-While Gleam runs on the BEAM, accessing distributed primitives (like connecting nodes, global registration, or RPC) often requires writing raw Erlang FFI or dealing with untyped atoms. **Distribute** solves this by providing a robust, type-safe layer over these primitives, making it easy to build distributed systems without leaving Gleam.
+While Gleam runs on the BEAM, accessing distributed primitives (like connecting nodes,
+global registration, or RPC) often requires writing raw Erlang FFI or dealing with
+untyped atoms. **Distribute** addresses this by providing a robust, type-safe Gleam API
+over these primitives, making it easier to build distributed systems without leaving Gleam.
+
+## ⚠️ Type Safety Clarification
+
+Many APIs in this library (node management, registries, groups, etc.)
+leverage Gleam’s static type system to provide safer usage and structured errors.
+However, the contents of distributed messages and generic RPC calls are transmitted
+via Erlang FFI and are not checked by the Gleam compiler.
+Incorrect message shapes or RPC signatures will only fail at runtime.
 
 ## Features
 
