@@ -9,9 +9,7 @@
 /// For type-safe group operations, use the `_typed` variants which require
 /// `Encoder`/`Decoder` and work with `Subject(a)` instead of raw Pids.
 import distribute/codec
-import distribute/registry
-import distribute/typed_process
-import gleam/list
+import gleam/erlang/process.{type Pid, type Subject}
 
 pub type GroupError {
   /// A group operation failed (e.g. invalid group name or internal error).
@@ -23,9 +21,6 @@ pub type GroupError {
 }
 
 type Dynamic
-
-pub type Pid =
-  registry.Pid
 
 @external(erlang, "groups_ffi", "join")
 fn join_ffi(group: String, pid: Pid) -> Dynamic
@@ -91,32 +86,32 @@ pub fn broadcast(group: String, msg: a) -> Result(Nil, GroupError) {
 /// Join a typed subject to a named group.
 pub fn join_typed(
   group: String,
-  subject: typed_process.Subject(a),
+  subject: Subject(msg),
 ) -> Result(Nil, GroupError) {
-  join(group, typed_process.to_pid(subject))
+  let assert Ok(pid) = process.subject_owner(subject)
+  join(group, pid)
 }
 
 /// Remove a typed subject from a named group.
 pub fn leave_typed(
   group: String,
-  subject: typed_process.Subject(a),
+  subject: Subject(msg),
 ) -> Result(Nil, GroupError) {
-  leave(group, typed_process.to_pid(subject))
+  let assert Ok(pid) = process.subject_owner(subject)
+  leave(group, pid)
 }
 
 /// Get the list of typed members in a group.
-/// Each Pid is wrapped as a Subject with the provided tag.
-/// Use this when you know all members of the group share the same message type.
-pub fn members_typed(
-  group: String,
-  tag: String,
-) -> List(typed_process.Subject(a)) {
+/// Returns raw Pids as we cannot safely convert them to Subjects without
+/// knowing their message types. Use this with caution or create Subjects
+/// using process.unsafely_create_subject if you know the message type.
+pub fn members_typed(group: String) -> List(Pid) {
   members(group)
-  |> list.map(fn(pid) { typed_process.from_pid_with_tag(pid, tag) })
 }
 
 /// Broadcast a typed message to all members of a group.
 /// The message is encoded using the provided encoder before sending.
+/// Members should be expecting BitArray messages.
 pub fn broadcast_typed(
   group: String,
   msg: a,
