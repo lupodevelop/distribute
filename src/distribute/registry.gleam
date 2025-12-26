@@ -7,6 +7,7 @@
 /// node in the cluster. If a network partition occurs, the registry will
 /// eventually resolve conflicts when the partition heals.
 import distribute/log
+import gleam/erlang/process.{type Pid}
 import gleam/string
 
 pub type RegisterError {
@@ -23,8 +24,6 @@ pub type RegisterError {
 }
 
 type Dynamic
-
-pub type Pid
 
 @external(erlang, "registry_ffi", "register")
 fn register_ffi(name: String, pid: Pid) -> Dynamic
