@@ -153,7 +153,7 @@ pub fn list_codec_with_envelope_test() {
   let original = [42]
 
   let encoder = codec.list_encoder(codec.int_encoder())
-  let decoder = codec.list_decoder(codec.int_decoder())
+  let decoder = codec.list_decoder(codec.int_sized_decoder())
 
   let assert Ok(payload) = codec.encode(encoder, original)
   let wrapped = codec.wrap_envelope(tag, version, payload)
@@ -274,5 +274,347 @@ pub fn encode_error_to_send_error_test() {
   case send_err {
     messaging.EncodeFailed(e) -> e |> should.equal(encode_err)
     _ -> should.fail()
+  }
+}
+
+// ============================================================================
+// Schema tests
+// ============================================================================
+
+pub fn schema_encode_decode_test() {
+  let schema =
+    codec.new_schema(
+      tag: "greeting",
+      version: 1,
+      encoder: codec.string_encoder(),
+      decoder: codec.string_decoder(),
+    )
+
+  let original = "Hello, Schema!"
+  let assert Ok(encoded) = codec.schema_encode(schema, original)
+  let assert Ok(decoded) = codec.schema_decode(schema, encoded)
+
+  decoded |> should.equal(original)
+}
+
+pub fn schema_tag_mismatch_returns_error_test() {
+  let schema1 =
+    codec.new_schema(
+      tag: "type_a",
+      version: 1,
+      encoder: codec.int_encoder(),
+      decoder: codec.int_decoder(),
+    )
+
+  let schema2 =
+    codec.new_schema(
+      tag: "type_b",
+      version: 1,
+      encoder: codec.int_encoder(),
+      decoder: codec.int_decoder(),
+    )
+
+  let assert Ok(encoded) = codec.schema_encode(schema1, 42)
+
+  case codec.schema_decode(schema2, encoded) {
+    Error(codec.TagMismatch(expected, got)) -> {
+      expected |> should.equal("type_b")
+      got |> should.equal("type_a")
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn schema_version_mismatch_returns_error_test() {
+  let schema_v1 =
+    codec.new_schema(
+      tag: "msg",
+      version: 1,
+      encoder: codec.int_encoder(),
+      decoder: codec.int_decoder(),
+    )
+
+  let schema_v2 =
+    codec.new_schema(
+      tag: "msg",
+      version: 2,
+      encoder: codec.int_encoder(),
+      decoder: codec.int_decoder(),
+    )
+
+  let assert Ok(encoded) = codec.schema_encode(schema_v1, 100)
+
+  case codec.schema_decode(schema_v2, encoded) {
+    Error(codec.VersionMismatch(expected, got)) -> {
+      expected |> should.equal(2)
+      got |> should.equal(1)
+    }
+    _ -> should.fail()
+  }
+}
+
+pub fn peek_tag_test() {
+  let data = codec.wrap_envelope("my_tag", 5, <<"payload">>)
+  let assert Ok(tag) = codec.peek_tag(data)
+  tag |> should.equal("my_tag")
+}
+
+pub fn peek_envelope_test() {
+  let data = codec.wrap_envelope("event", 3, <<"data">>)
+  let assert Ok(#(tag, version)) = codec.peek_envelope(data)
+  tag |> should.equal("event")
+  version |> should.equal(3)
+}
+
+// ============================================================================
+// SizedDecoder tests
+// ============================================================================
+
+pub fn sized_decoder_string_returns_remaining_test() {
+  let data = <<0, 5, "hello", 99, 88>>
+  // length prefix 5, then "hello", then extra bytes
+  let decoder = codec.string_sized_decoder()
+  let assert Ok(#(value, remaining)) = decoder(data)
+  value |> should.equal("hello")
+  remaining |> should.equal(<<99, 88>>)
+}
+
+pub fn sized_decoder_int_returns_remaining_test() {
+  let data = <<0, 0, 0, 0, 0, 0, 0, 42, 1, 2, 3>>
+  // 8 bytes for int64 (42), then 1,2,3
+  let decoder = codec.int_sized_decoder()
+  let assert Ok(#(value, remaining)) = decoder(data)
+  value |> should.equal(42)
+  remaining |> should.equal(<<1, 2, 3>>)
+}
+
+pub fn list_of_strings_properly_decodes_test() {
+  let original = ["apple", "banana", "cherry"]
+  let encoder = codec.list_encoder(codec.string_encoder())
+  let decoder = codec.list_decoder(codec.string_sized_decoder())
+
+  let assert Ok(encoded) = codec.encode(encoder, original)
+  let assert Ok(decoded) = codec.decode(decoder, encoded)
+
+  decoded |> should.equal(original)
+}
+
+// ============================================================================
+// Tuple codec tests
+// ============================================================================
+
+pub fn tuple2_encode_decode_test() {
+  let original = #("hello", 42)
+  let encoder =
+    codec.tuple2_encoder(codec.string_encoder(), codec.int_encoder())
+  let decoder =
+    codec.tuple2_decoder(
+      codec.string_sized_decoder(),
+      codec.int_sized_decoder(),
+    )
+
+  let assert Ok(encoded) = codec.encode(encoder, original)
+  let assert Ok(decoded) = codec.decode(decoder, encoded)
+
+  decoded |> should.equal(original)
+}
+
+pub fn tuple3_encode_decode_test() {
+  let original = #("test", 123, 3.14)
+  let encoder =
+    codec.tuple3_encoder(
+      codec.string_encoder(),
+      codec.int_encoder(),
+      codec.float_encoder(),
+    )
+  let decoder =
+    codec.tuple3_decoder(
+      codec.string_sized_decoder(),
+      codec.int_sized_decoder(),
+      codec.float_sized_decoder(),
+    )
+
+  let assert Ok(encoded) = codec.encode(encoder, original)
+  let assert Ok(decoded) = codec.decode(decoder, encoded)
+
+  decoded |> should.equal(original)
+}
+
+// ============================================================================
+// Versioned decoder tests
+// ============================================================================
+
+pub fn versioned_decoder_handles_multiple_versions_test() {
+  // Simulate v1 and v2 with different payload formats
+  let v1_payload = <<0, 0, 0, 0, 0, 0, 0, 10>>
+  // int 10
+  let v2_payload = <<0, 0, 0, 0, 0, 0, 0, 20>>
+  // int 20
+
+  let data_v1 = codec.wrap_envelope("num", 1, v1_payload)
+  let data_v2 = codec.wrap_envelope("num", 2, v2_payload)
+
+  let decoder =
+    codec.versioned_decoder("num", [
+      #(1, codec.int_decoder()),
+      #(2, codec.int_decoder()),
+    ])
+
+  let assert Ok(result1) = decoder(data_v1)
+  let assert Ok(result2) = decoder(data_v2)
+
+  result1 |> should.equal(10)
+  result2 |> should.equal(20)
+}
+
+pub fn versioned_decoder_rejects_unknown_version_test() {
+  let data = codec.wrap_envelope("num", 99, <<0, 0, 0, 0, 0, 0, 0, 1>>)
+
+  let decoder = codec.versioned_decoder("num", [#(1, codec.int_decoder())])
+
+  case decoder(data) {
+    Error(codec.VersionMismatch(_, got)) -> got |> should.equal(99)
+    _ -> should.fail()
+  }
+}
+
+pub fn versioned_decoder_from_schemas_test() {
+  let v1_schema =
+    codec.new_schema(
+      tag: "num",
+      version: 1,
+      encoder: codec.int_encoder(),
+      decoder: codec.int_decoder(),
+    )
+
+  let v2_schema =
+    codec.new_schema(
+      tag: "num",
+      version: 2,
+      encoder: codec.int_encoder(),
+      decoder: codec.int_decoder(),
+    )
+
+  let data_v1 = codec.wrap_envelope("num", 1, <<0, 0, 0, 0, 0, 0, 0, 10>>)
+  let data_v2 = codec.wrap_envelope("num", 2, <<0, 0, 0, 0, 0, 0, 0, 20>>)
+
+  let decoder = codec.versioned_decoder_from_schemas([v1_schema, v2_schema])
+
+  let assert Ok(result1) = decoder(data_v1)
+  let assert Ok(result2) = decoder(data_v2)
+
+  result1 |> should.equal(10)
+  result2 |> should.equal(20)
+}
+
+pub fn schema_decode_with_migrations_test() {
+  // target schema is version 2
+  let target =
+    codec.new_schema(
+      tag: "num",
+      version: 2,
+      encoder: codec.int_encoder(),
+      decoder: codec.int_decoder(),
+    )
+
+  // migration from v1 -> v2: in this test our payload format is identical,
+  // so the migration is a no-op. In real scenarios this could transform
+  // payload bytes (e.g., change field order, add defaults, etc.)
+  let migration = fn(payload: BitArray) { Ok(payload) }
+
+  let data_v1 = codec.wrap_envelope("num", 1, <<0, 0, 0, 0, 0, 0, 0, 10>>)
+  let decoder = codec.schema_decode_with_migrations(target, [#(1, migration)])
+
+  let assert Ok(result) = decoder(data_v1)
+  result |> should.equal(10)
+}
+
+pub fn schema_decode_with_migrations_missing_migration_test() {
+  let target =
+    codec.new_schema(
+      tag: "num",
+      version: 2,
+      encoder: codec.int_encoder(),
+      decoder: codec.int_decoder(),
+    )
+
+  let data_v1 = codec.wrap_envelope("num", 1, <<0, 0, 0, 0, 0, 0, 0, 10>>)
+  let decoder = codec.schema_decode_with_migrations(target, [])
+
+  case decoder(data_v1) {
+    Error(codec.MigrationMissing(step)) -> step |> should.equal(1)
+    _ -> should.fail()
+  }
+}
+
+pub fn migration_chain_applies_steps_test() {
+  // Prepare migrations that increment the integer payload
+  let migr1 = fn(payload: BitArray) {
+    case codec.int_decoder()(payload) {
+      Ok(v) ->
+        case codec.encode(codec.int_encoder(), v + 1) {
+          Ok(b) -> Ok(b)
+          Error(enc) ->
+            Error(codec.DecodeFailed(codec.encode_error_to_string(enc)))
+        }
+      Error(e) -> Error(e)
+    }
+  }
+
+  let migr2 = fn(payload: BitArray) {
+    case codec.int_decoder()(payload) {
+      Ok(v) ->
+        case codec.encode(codec.int_encoder(), v + 1) {
+          Ok(b) -> Ok(b)
+          Error(enc) ->
+            Error(codec.DecodeFailed(codec.encode_error_to_string(enc)))
+        }
+      Error(e) -> Error(e)
+    }
+  }
+
+  // Use graph-based builder with explicit edges (1->2, 2->3)
+  let chain = codec.build_migration_graph([#(1, 2, migr1), #(2, 3, migr2)])
+
+  let data_v1 = codec.wrap_envelope("num", 1, <<0, 0, 0, 0, 0, 0, 0, 10>>)
+  // Apply chain from 1 -> 3
+  case codec.unwrap_envelope(data_v1) {
+    Ok(#(_, _, payload)) ->
+      case chain(1, 3, payload) {
+        Ok(new_payload) ->
+          case codec.int_decoder()(new_payload) {
+            Ok(v) -> v |> should.equal(12)
+            Error(_) -> should.fail()
+          }
+        Error(_) -> should.fail()
+      }
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn migration_chain_missing_step_test() {
+  let migr1 = fn(payload: BitArray) {
+    case codec.int_decoder()(payload) {
+      Ok(v) ->
+        case codec.encode(codec.int_encoder(), v + 1) {
+          Ok(b) -> Ok(b)
+          Error(enc) ->
+            Error(codec.DecodeFailed(codec.encode_error_to_string(enc)))
+        }
+      Error(e) -> Error(e)
+    }
+  }
+
+  // chain builder accepts both single-step and multi-step edges; test missing step
+  let chain = codec.build_migration_graph([#(1, 2, migr1)])
+  let data_v1 = codec.wrap_envelope("num", 1, <<0, 0, 0, 0, 0, 0, 0, 10>>)
+
+  case codec.unwrap_envelope(data_v1) {
+    Ok(#(_, _, payload)) ->
+      case chain(1, 3, payload) {
+        Error(codec.MigrationMissing(step)) -> step |> should.equal(1)
+        _ -> should.fail()
+      }
+    Error(_) -> should.fail()
   }
 }
