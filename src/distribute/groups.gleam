@@ -77,8 +77,8 @@ pub fn members(group: String) -> List(Pid) {
 
 /// Broadcast a message to all members of a group.
 ///
-/// @deprecated Use `broadcast_typed` with a codec for type-safe group messaging.
 /// This function bypasses all type checking and encoding validation.
+@deprecated("Use broadcast_typed with a codec for type-safe group messaging.")
 pub fn broadcast(group: String, msg: a) -> Result(Nil, GroupError) {
   let res = broadcast_ffi(group, msg)
   case is_ok_atom(res) {

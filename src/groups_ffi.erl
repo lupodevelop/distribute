@@ -62,7 +62,8 @@ broadcast_binary(Group, BinaryMsg) when is_binary(BinaryMsg) ->
                             %% Filter out dead processes before sending
                             AliveMembers = lists:filter(fun is_process_alive/1, Members),
                             try
-                                lists:foreach(fun(Pid) -> Pid ! BinaryMsg end, AliveMembers),
+                                %% Wrap in {nil, Msg} to match Subject(Pid, Nil)
+                                lists:foreach(fun(Pid) -> Pid ! {nil, BinaryMsg} end, AliveMembers),
                                 ok
                             catch
                                 _:Reason -> {error, iolist_to_binary(io_lib:format("broadcast_failed: ~p", [Reason]))}
