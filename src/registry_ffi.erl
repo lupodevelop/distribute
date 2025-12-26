@@ -2,7 +2,9 @@
 -module(registry_ffi).
 -export([register/2, unregister/1, whereis/1,
          is_ok_atom/1, is_already_registered/1, get_error_reason/1,
-         is_pid/1, dynamic_to_pid/1]).
+         is_pid/1, dynamic_to_pid/1, make_subject/2]).
+
+make_subject(Pid, Tag) -> {subject, Pid, Tag}.
 
 register(Name, Pid) ->
     case erlang:is_pid(Pid) of

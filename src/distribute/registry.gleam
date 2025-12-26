@@ -7,6 +7,7 @@
 /// node in the cluster. If a network partition occurs, the registry will
 /// eventually resolve conflicts when the partition heals.
 import distribute/log
+import gleam/dynamic.{type Dynamic}
 import gleam/erlang/process
 import gleam/string
 
@@ -27,8 +28,6 @@ pub type RegisterError {
   /// Generic registration failure.
   RegisterFailed(String)
 }
-
-type Dynamic
 
 @external(erlang, "registry_ffi", "register")
 fn register_ffi(name: String, pid: Pid) -> Dynamic
@@ -99,20 +98,34 @@ fn validate_name(name: String) -> Result(Nil, RegisterError) {
   }
 }
 
-/// Register a Subject globally.
+/// Register a typed Subject globally.
 ///
-/// This is a convenience wrapper around `register` that extracts the
-/// owner Pid from the Subject.
+/// This registers the owner Pid of the subject.
 ///
-/// Note: This only works for `Subject`s that have an owner (not `NamedSubject`).
-pub fn register_subject(
+/// ⚠️ **WARNING**: This function discards the Subject's tag.
+/// The `Subject` returned by `whereis_typed` will have a `Nil` tag.
+/// Standard `gleam_otp` actors (started via `actor.start`) require a specific
+/// tag and will **NOT** receive messages sent to the Subject returned by `whereis_typed`.
+///
+/// Use this only for processes that accept messages with a `Nil` tag,
+/// such as those started with `receiver.start_global_receiver`.
+pub fn register_typed(
   name: String,
-  subject: process.Subject(a),
+  subject: process.Subject(msg),
 ) -> Result(Nil, RegisterError) {
   case process.subject_owner(subject) {
     Ok(pid) -> register(name, pid)
     Error(Nil) -> Error(InvalidProcess)
   }
+}
+
+/// Register a Subject globally (alias for register_typed).
+@deprecated("Use register_typed instead")
+pub fn register_subject(
+  name: String,
+  subject: process.Subject(a),
+) -> Result(Nil, RegisterError) {
+  register_typed(name, subject)
 }
 
 /// Register a process globally under the given name.
@@ -170,5 +183,16 @@ pub fn whereis(name: String) -> Result(Pid, Nil) {
   case is_pid(res) {
     True -> Ok(dynamic_to_pid(res))
     False -> Error(Nil)
+  }
+}
+
+/// Look up a globally registered process and return a typed Subject.
+///
+/// The returned Subject will have a `Nil` tag.
+/// Ensure the target process accepts messages with a `Nil` tag.
+pub fn whereis_typed(name: String) -> Result(process.Subject(msg), Nil) {
+  case whereis(name) {
+    Ok(pid) -> Ok(process.unsafely_create_subject(pid, dynamic.nil()))
+    Error(Nil) -> Error(Nil)
   }
 }
