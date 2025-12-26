@@ -26,20 +26,17 @@ send_binary_global(Name, BinaryMsg) when is_binary(BinaryMsg) ->
             case global:whereis_name(A) of
                 undefined -> {error, not_found};
                 Pid when is_pid(Pid) ->
-                    case is_process_alive(Pid) of
-                        false -> {error, <<"process_not_alive">>};
-                        true ->
-                            %% Validate binary size (max 10MB for safety)
-                            case byte_size(BinaryMsg) > 10485760 of
-                                true -> {error, <<"message_too_large">>};
-                                false ->
-                                    try
-                                        Pid ! BinaryMsg,
-                                        ok
-                                    catch
-                                        error:badarg -> {error, <<"invalid_message">>};
-                                        _:Reason -> {error, iolist_to_binary(io_lib:format("send_failed: ~p", [Reason]))}
-                                    end
+                    %% Validate binary size (max 10MB for safety)
+                    case byte_size(BinaryMsg) > 10485760 of
+                        true -> {error, <<"message_too_large">>};
+                        false ->
+                            try
+                                %% Wrap in {nil, Msg} to match Subject(Pid, Nil)
+                                Pid ! {nil, BinaryMsg},
+                                ok
+                            catch
+                                error:badarg -> {error, <<"invalid_message">>};
+                                _:Reason -> {error, iolist_to_binary(io_lib:format("send_failed: ~p", [Reason]))}
                             end
                     end
             end;

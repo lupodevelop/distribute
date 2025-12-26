@@ -86,8 +86,8 @@ pub fn is_network_error(reason: String) -> Bool {
 
 /// Send a message to a process (local or remote).
 ///
-/// @deprecated Use `send_typed` with a `Subject(BitArray)` and codec for type-safe messaging.
 /// This function bypasses all type checking and encoding validation.
+@deprecated("Use send_typed with a Subject(BitArray) and codec for type-safe messaging.")
 pub fn send(pid: Pid, msg: a) -> Nil {
   send_ffi(pid, msg)
   Nil
@@ -116,8 +116,8 @@ pub fn send_typed(
 /// Send a message to a globally registered name.
 /// Returns Ok(Nil) if successful, Error if name not found or send failed.
 ///
-/// @deprecated Use `send_global_typed` with a codec for type-safe messaging.
 /// This function bypasses all type checking and encoding validation.
+@deprecated("Use send_global_typed with a codec for type-safe messaging.")
 pub fn send_global(name: String, msg: a) -> Result(Nil, SendError) {
   log.debug("Sending message to global name", [#("name", name)])
   let res = send_global_ffi(name, msg)
@@ -160,52 +160,16 @@ pub type BatchSendResult {
 
 /// Send multiple messages in batch with error aggregation
 /// Returns detailed results including all errors encountered
-pub fn send_batch(messages: List(#(String, a))) -> BatchSendResult {
-  log.debug("Sending batch of messages", [
-    #("count", string.inspect(list.length(messages))),
-  ])
-
-  let results =
-    list.map(messages, fn(msg_pair) {
-      let #(name, msg) = msg_pair
-      send_global(name, msg)
-    })
-
-  let successes =
-    list.filter(results, fn(r) {
-      case r {
-        Ok(_) -> True
-        Error(_) -> False
-      }
-    })
-    |> list.length
-
-  let errors =
-    list.fold(results, [], fn(acc, r) {
-      case r {
-        Error(e) -> [e, ..acc]
-        Ok(_) -> acc
-      }
-    })
-
-  let total = list.length(messages)
-  log.debug("Batch send completed", [
-    #("total", string.inspect(total)),
-    #("successful", string.inspect(successes)),
-    #("failed", string.inspect(list.length(errors))),
-  ])
-
-  BatchSendResult(
-    total: total,
-    successful: successes,
-    failed: list.length(errors),
-    errors: errors,
-  )
+@deprecated("Use send_batch_typed instead.")
+pub fn send_batch(messages: List(#(String, String))) -> BatchSendResult {
+  send_batch_typed(messages, codec.string_encoder())
 }
 
 /// Send batch and return Ok only if all succeeded, Error with first failure otherwise
-pub fn send_batch_strict(messages: List(#(String, a))) -> Result(Nil, SendError) {
-  let result = send_batch(messages)
+pub fn send_batch_strict(
+  messages: List(#(String, String)),
+) -> Result(Nil, SendError) {
+  let result = send_batch_typed(messages, codec.string_encoder())
   case result.failed {
     0 -> Ok(Nil)
     _ ->
