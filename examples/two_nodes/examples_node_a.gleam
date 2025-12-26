@@ -1,21 +1,33 @@
 import distribute/cluster
+import distribute/codec
+import distribute/global
+import distribute/registry
+import distribute/settings
 import gleam/io
-import gleam/string
-import distribute/monitor
 
-pub fn start() -> Nil {
-  // Start this node in distributed mode (short name)
+pub fn main() -> Nil {
+  // Allow atom creation for node name
+  settings.set_allow_atom_creation(True)
+
+  // Start this node in distributed mode
   let _ = cluster.start_node("app_a@127.0.0.1", "cookie_integ")
 
-  // Spawn a process that receives messages and prints them
-  // Use current process as a simple handler for example purposes
-  let pid = monitor.self()
+  // Create a type-safe global subject for receiving messages
+  let global = global.new(codec.string_encoder(), codec.string_decoder())
 
-  // (Example) We could register the pid globally, but registry.Pid and
-  // monitor.Pid are distinct opaque types in this example. For a real
-  // integration test, use the library API directly in a compiled example
-  // project. Here we just print the pid for demonstration.
-  io.println("Node A started (pid: " <> string.inspect(pid) <> ")")
-  // Keep the function alive; actual node will be kept alive by erl -noshell loop
+  // Register it globally as 'calculator'
+  case registry.register_typed("calculator", global.subject(global)) {
+    Ok(_) -> io.println("Node A: 'calculator' registered successfully")
+    Error(_) -> io.println("Node A: Failed to register 'calculator'")
+  }
+
+  io.println("Node A started and ready to receive messages")
+
+  // Wait for incoming message
+  case global.receive(global, 10_000) {
+    Ok(msg) -> io.println("calc got: " <> msg)
+    Error(_) -> io.println("No message received")
+  }
+
   Nil
 }

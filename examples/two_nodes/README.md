@@ -40,6 +40,9 @@ Run:
 ./examples/two_nodes/swim_integration.sh
 ```
 
+> **Note:** The legacy wrapper `run_swim_integration.sh` has been removed — use `swim_integration.sh` directly.
+
+
 ### `partition_rejoin.sh`
 
 Starts 3 nodes, simulates a “partition” by stopping the membership service on node B, then starts it again and prints membership views.
