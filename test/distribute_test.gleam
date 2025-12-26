@@ -1,11 +1,5 @@
 import distribute/cluster
 import distribute/connection_pool
-import gleam/dynamic
-import gleam/list
-import gleam/option
-import gleam/string
-import gleeunit
-import gleeunit/should
 import distribute/groups
 import distribute/log
 import distribute/messaging
@@ -13,6 +7,12 @@ import distribute/monitor
 import distribute/node_builder
 import distribute/registry
 import distribute/remote_call
+import gleam/dynamic
+import gleam/list
+import gleam/option
+import gleam/string
+import gleeunit
+import gleeunit/should
 
 pub fn main() -> Nil {
   // Disable logging during tests to keep output clean
@@ -83,7 +83,7 @@ pub fn cluster_start_node_cookie_too_long_validation_test() {
 
 pub fn registry_whereis_nonexistent_returns_none_test() {
   let result = registry.whereis("nonexistent_process_name_12345")
-  should.equal(result, option.None)
+  should.equal(result, Error(Nil))
 }
 
 pub fn registry_register_error_types_exist_test() {
@@ -1345,8 +1345,8 @@ pub fn raft_lite_current_leader_test() {
   // In single node test, should return None
   let result = raft_lite.current_leader()
   case result {
-    option.None -> should.be_true(True)
-    option.Some(_) -> should.be_true(True)
+    Error(Nil) -> should.be_true(True)
+    Ok(_) -> should.be_true(True)
   }
 }
 
@@ -1369,8 +1369,8 @@ pub fn raft_lite_am_i_leader_test() {
 pub fn raft_lite_get_raft_leader_test() {
   let result = raft_lite.get_raft_leader()
   case result {
-    option.None -> should.be_true(True)
-    option.Some(_) -> should.be_true(True)
+    Error(Nil) -> should.be_true(True)
+    Ok(_) -> should.be_true(True)
   }
 }
 
@@ -1414,8 +1414,8 @@ pub fn membership_current_leader_test() {
   membership.start_service(100)
   let leader = membership.current_leader()
   case leader {
-    option.None -> should.be_true(True)
-    option.Some(_) -> should.be_true(True)
+    Error(Nil) -> should.be_true(True)
+    Ok(_) -> should.be_true(True)
   }
   membership.stop_service()
 }
@@ -1526,8 +1526,8 @@ pub fn health_current_leader_test() {
   membership.start_service(100)
   let leader = health.current_leader()
   case leader {
-    option.None -> should.be_true(True)
-    option.Some(_) -> should.be_true(True)
+    Error(Nil) -> should.be_true(True)
+    Ok(_) -> should.be_true(True)
   }
   membership.stop_service()
 }

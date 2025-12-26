@@ -1,9 +1,9 @@
 import distribute/cluster
 import distribute/cluster/membership
+import distribute/monitor
 import gleam/io
 import gleam/option
 import gleam/string
-import distribute/monitor
 
 pub fn start() -> Nil {
   // Start this node in distributed mode (short name)
@@ -22,8 +22,8 @@ pub fn start() -> Nil {
   io.println("Alive nodes: " <> string.inspect(alive))
   let leader = membership.current_leader()
   case leader {
-    option.Some(l) -> io.println("Current leader: " <> l)
-    option.None -> io.println("No leader elected")
+    Ok(l) -> io.println("Current leader: " <> l)
+    Error(Nil) -> io.println("No leader elected")
   }
 
   // Keep the function alive; the integration script will keep the BEAM VM running

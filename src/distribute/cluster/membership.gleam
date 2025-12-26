@@ -83,13 +83,11 @@ pub fn suspect() -> List(String) {
   suspect_ffi()
 }
 
-import gleam/option
-
-pub fn current_leader() -> option.Option(String) {
+pub fn current_leader() -> Result(String, Nil) {
   let s = current_leader_ffi()
   case s {
-    "" -> option.None
-    _ -> option.Some(s)
+    "" -> Error(Nil)
+    _ -> Ok(s)
   }
 }
 

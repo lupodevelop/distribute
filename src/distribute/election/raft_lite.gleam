@@ -8,7 +8,6 @@
 ///    based on the lexicographically largest node among the alive members.
 import distribute/cluster/membership
 import gleam/list
-import gleam/option
 import gleam/string
 
 @external(erlang, "raft_ffi", "start")
@@ -74,11 +73,11 @@ pub fn send_heartbeat(leader: String) -> Nil {
 
 /// Get the current leader from the Raft service.
 /// Returns the leader node name, or empty string if no leader.
-pub fn get_raft_leader() -> option.Option(String) {
+pub fn get_raft_leader() -> Result(String, Nil) {
   let leader = get_leader_ffi()
   case leader {
-    "" -> option.None
-    _ -> option.Some(leader)
+    "" -> Error(Nil)
+    _ -> Ok(leader)
   }
 }
 
@@ -109,10 +108,10 @@ pub fn elect() -> ElectionResult {
   }
 }
 
-/// Convenience: return the current leader as `Option(String)`.
-pub fn current_leader() -> option.Option(String) {
+/// Convenience: return the current leader as `Result(String, Nil)`.
+pub fn current_leader() -> Result(String, Nil) {
   case elect() {
-    Leader(n) -> option.Some(n)
-    NoLeader -> option.None
+    Leader(n) -> Ok(n)
+    NoLeader -> Error(Nil)
   }
 }

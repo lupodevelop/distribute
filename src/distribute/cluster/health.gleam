@@ -4,7 +4,6 @@
 /// and the overall cluster, based on membership status and connectivity.
 import distribute/cluster/membership
 import gleam/list
-import gleam/option
 
 /// Health status of the cluster.
 pub type ClusterHealth {
@@ -98,6 +97,6 @@ pub fn has_quorum(expected_nodes: Int) -> Bool {
 }
 
 /// Get the current leader if available.
-pub fn current_leader() -> option.Option(String) {
+pub fn current_leader() -> Result(String, Nil) {
   membership.current_leader()
 }
