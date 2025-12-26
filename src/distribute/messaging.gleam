@@ -7,7 +7,7 @@
 /// across the cluster.
 import distribute/codec
 import distribute/log
-import distribute/typed_process
+import gleam/erlang/process.{type Pid, type Subject}
 import gleam/list
 import gleam/string
 
@@ -27,9 +27,6 @@ pub type SendError {
 }
 
 type Dynamic
-
-pub type Pid =
-  typed_process.Pid
 
 @external(erlang, "erlang", "send")
 fn send_ffi(pid: Pid, msg: a) -> a
@@ -100,13 +97,13 @@ pub fn send(pid: Pid, msg: a) -> Nil {
 /// Send a typed message to a subject. The message is encoded using the
 /// provided encoder and sent as binary data to ensure type safety.
 pub fn send_typed(
-  subject: typed_process.Subject(a),
+  subject: Subject(BitArray),
   msg: a,
   encoder: codec.Encoder(a),
 ) -> Result(Nil, SendError) {
   case codec.encode(encoder, msg) {
     Ok(binary_msg) -> {
-      send_ffi(typed_process.to_pid(subject), binary_msg)
+      process.send(subject, binary_msg)
       Ok(Nil)
     }
     Error(encode_error) -> Error(EncodeFailed(encode_error))
