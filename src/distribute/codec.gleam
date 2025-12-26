@@ -158,6 +158,87 @@ pub fn list_decoder(element_decoder: Decoder(a)) -> Decoder(List(a)) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Envelope: tag + version + payload
+// ---------------------------------------------------------------------------
+
+// Wrap a payload with a small envelope containing a tag and a version.
+pub fn wrap_envelope(tag: String, version: Int, payload: BitArray) -> BitArray {
+  let tag_bytes = bit_array.from_string(tag)
+  let tag_len = bit_array.byte_size(tag_bytes)
+  let tag_len_bytes = <<tag_len:16>>
+  let version_bytes = <<version:32>>
+  bit_array.append(
+    bit_array.append(tag_len_bytes, tag_bytes),
+    bit_array.append(version_bytes, payload),
+  )
+}
+
+// Unwrap an envelope returning (tag, version, payload) or a DecodeError.
+pub fn unwrap_envelope(
+  data: BitArray,
+) -> Result(#(String, Int, BitArray), DecodeError) {
+  case data {
+    <<tag_len:16, rest:bytes>> -> {
+      let rest_size = bit_array.byte_size(rest)
+      case rest_size >= tag_len + 4 {
+        // 4 bytes for version (32-bit)
+        False -> Error(InsufficientData("envelope too short"))
+        True -> {
+          case bit_array.slice(rest, 0, tag_len) {
+            Ok(tag_bytes) -> {
+              case bit_array.to_string(tag_bytes) {
+                Ok(tag_str) -> {
+                  // remaining after tag
+                  case bit_array.slice(rest, tag_len, rest_size - tag_len) {
+                    Ok(after_tag) -> {
+                      case after_tag {
+                        <<version:32, payload:bytes>> ->
+                          Ok(#(tag_str, version, payload))
+                        _ ->
+                          Error(InvalidBinary(
+                            "missing version/payload in envelope",
+                          ))
+                      }
+                    }
+                    Error(_) ->
+                      Error(InsufficientData("failed to slice after tag"))
+                  }
+                }
+                Error(_) -> Error(InvalidBinary("invalid UTF-8 in tag"))
+              }
+            }
+            Error(_) -> Error(InsufficientData("failed to slice tag bytes"))
+          }
+        }
+      }
+    }
+    _ -> Error(InvalidBinary("missing envelope length prefix"))
+  }
+}
+
+// Helper to receive and decode a payload inside an envelope. It validates
+// tag and version before invoking the provided `Decoder` on the payload.
+pub fn receive_with_decoder(
+  decoder: Decoder(a),
+  expected_tag: String,
+  expected_version: Int,
+  data: BitArray,
+) -> Result(a, DecodeError) {
+  case unwrap_envelope(data) {
+    Ok(#(tag, version, payload)) ->
+      case tag == expected_tag {
+        False -> Error(TypeMismatch("tag mismatch"))
+        True ->
+          case version == expected_version {
+            False -> Error(TypeMismatch("version mismatch"))
+            True -> decode(decoder, payload)
+          }
+      }
+    Error(e) -> Error(e)
+  }
+}
+
 // -----------------
 // Helper functions
 // -----------------
