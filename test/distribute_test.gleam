@@ -125,6 +125,7 @@ pub fn messaging_send_global_nonexistent_returns_error_test() {
     Error(messaging.ProcessNotAlive) -> should.be_true(True)
     Error(messaging.NetworkError(_)) -> should.be_true(True)
     Error(messaging.InvalidMessage(_)) -> should.be_true(True)
+    Error(messaging.EncodeFailed(_)) -> should.be_true(True)
     Error(messaging.SendFailed(_)) -> should.be_true(True)
     Ok(_) -> should.fail()
   }
