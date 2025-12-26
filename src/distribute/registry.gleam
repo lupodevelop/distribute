@@ -7,8 +7,13 @@
 /// node in the cluster. If a network partition occurs, the registry will
 /// eventually resolve conflicts when the partition heals.
 import distribute/log
-import gleam/erlang/process.{type Pid}
+import gleam/erlang/process
 import gleam/string
+
+/// Re-export Pid from gleam/erlang/process for API compatibility.
+/// Use `gleam/erlang/process.Pid` directly in new code.
+pub type Pid =
+  process.Pid
 
 pub type RegisterError {
   /// Name is already registered by another process.
@@ -91,6 +96,22 @@ fn validate_name(name: String) -> Result(Nil, RegisterError) {
         True -> Error(InvalidName("Name cannot contain spaces"))
         False -> Ok(Nil)
       }
+  }
+}
+
+/// Register a Subject globally.
+///
+/// This is a convenience wrapper around `register` that extracts the
+/// owner Pid from the Subject.
+///
+/// Note: This only works for `Subject`s that have an owner (not `NamedSubject`).
+pub fn register_subject(
+  name: String,
+  subject: process.Subject(a),
+) -> Result(Nil, RegisterError) {
+  case process.subject_owner(subject) {
+    Ok(pid) -> register(name, pid)
+    Error(Nil) -> Error(InvalidProcess)
   }
 }
 
