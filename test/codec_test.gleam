@@ -51,3 +51,33 @@ pub fn bool_codec_roundtrip_test() {
     Error(_) -> should.be_true(False)
   }
 }
+
+import gleam/erlang/process
+
+pub fn pid_codec_test() {
+  let pid = process.self()
+
+  let encoded = codec.pid_encoder()(pid)
+  encoded |> should.be_ok
+
+  let assert Ok(data) = encoded
+  let decoded = codec.pid_decoder()(data)
+  decoded |> should.be_ok
+
+  let assert Ok(decoded_pid) = decoded
+  decoded_pid |> should.equal(pid)
+}
+
+pub fn subject_codec_test() {
+  let subject = process.new_subject()
+
+  let encoded = codec.subject_encoder()(subject)
+  encoded |> should.be_ok
+
+  let assert Ok(data) = encoded
+  let decoded = codec.subject_decoder()(data)
+  decoded |> should.be_ok
+
+  let assert Ok(decoded_subject) = decoded
+  decoded_subject |> should.equal(subject)
+}
