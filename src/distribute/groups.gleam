@@ -9,7 +9,12 @@
 /// For type-safe group operations, use the `_typed` variants which require
 /// `Encoder`/`Decoder` and work with `Subject(a)` instead of raw Pids.
 import distribute/codec
-import gleam/erlang/process.{type Pid, type Subject}
+import gleam/erlang/process.{type Subject}
+
+/// Re-export Pid from gleam/erlang/process for API compatibility.
+/// Use `gleam/erlang/process.Pid` directly in new code.
+pub type Pid =
+  process.Pid
 
 pub type GroupError {
   /// A group operation failed (e.g. invalid group name or internal error).
@@ -71,6 +76,9 @@ pub fn members(group: String) -> List(Pid) {
 }
 
 /// Broadcast a message to all members of a group.
+///
+/// @deprecated Use `broadcast_typed` with a codec for type-safe group messaging.
+/// This function bypasses all type checking and encoding validation.
 pub fn broadcast(group: String, msg: a) -> Result(Nil, GroupError) {
   let res = broadcast_ffi(group, msg)
   case is_ok_atom(res) {
