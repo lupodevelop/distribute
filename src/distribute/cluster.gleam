@@ -103,7 +103,7 @@ fn is_ok_atom(value: Dynamic) -> Bool
 fn get_error_reason(value: Dynamic) -> String
 
 /// Classify error reason into structured StartError
-fn classify_start_error(reason: String) -> StartError {
+pub fn classify_start_reason(reason: String) -> StartError {
   case reason {
     "already_started" -> AlreadyStarted
     "invalid_node_name" -> InvalidNodeName("Node name must contain '@'")
@@ -176,7 +176,7 @@ pub fn start_node(name: String, cookie: String) -> Result(Nil, StartError) {
               Ok(Nil)
             }
             False -> {
-              let error = classify_start_error(get_error_reason(res))
+              let error = classify_start_reason(get_error_reason(res))
               log.error("Failed to start node", [
                 #("node", name),
                 #("error", classify_start_error_to_string(error)),
@@ -244,18 +244,17 @@ fn validate_connect_node(node: String) -> Result(Nil, ConnectError) {
 // Classify the `Dynamic` result returned by the FFI into a
 // structured `ConnectError`. This keeps all runtime inspection of
 // untyped values inside this module and exposes a type-safe API.
+pub fn classify_connect_reason(reason: String) -> ConnectError {
+  case string.contains(reason, "timeout") {
+    True -> ConnectTimeout
+    False -> ConnectNetworkError(reason)
+  }
+}
+
 fn classify_connect_error(value: Dynamic) -> ConnectError {
-  // If FFI indicates an ignored connect, return that specific variant.
   case is_ignored_ffi(value) {
     True -> ConnectIgnored
-    False -> {
-      // Try to extract a textual reason from the FFI and classify it.
-      let reason = get_error_reason(value)
-      case string.contains(reason, "timeout") {
-        True -> ConnectTimeout
-        False -> ConnectNetworkError(reason)
-      }
-    }
+    False -> classify_connect_reason(get_error_reason(value))
   }
 }
 
