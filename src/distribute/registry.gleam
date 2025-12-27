@@ -196,3 +196,13 @@ pub fn whereis_typed(name: String) -> Result(process.Subject(msg), Nil) {
     Error(Nil) -> Error(Nil)
   }
 }
+
+/// Safer variant of `whereis_typed` that returns a typed `Result` with a
+/// `RegisterError` on failure. This makes it easier for callers to handle
+/// lookup failures in a type-safe way.
+pub fn whereis_subject(name: String) -> Result(process.Subject(msg), RegisterError) {
+  case whereis(name) {
+    Ok(pid) -> Ok(process.unsafely_create_subject(pid, dynamic.nil()))
+    Error(Nil) -> Error(InvalidProcess)
+  }
+}
