@@ -1,5 +1,8 @@
 import distribute/handshake.{Capability, Hello}
-import distribute/handshake_state.{initiator_start, responder_init, responder_handle_message, initiator_handle_message, Sent, Received, Established}
+import distribute/handshake_state.{
+  Established, Received, Sent, initiator_handle_message, initiator_start,
+  responder_handle_message, responder_init,
+}
 import gleeunit
 import gleeunit/should
 
@@ -8,11 +11,10 @@ pub fn main() -> Nil {
 }
 
 pub fn initiator_responder_full_flow_test() {
-  let local_hello = Hello(
-    node_id: "node-a",
-    node_info: [#("k", "v")],
-    capabilities: [Capability("proto", 1, 1, [])],
-  )
+  let local_hello =
+    Hello(node_id: "node-a", node_info: [#("k", "v")], capabilities: [
+      Capability("proto", 1, 1, []),
+    ])
 
   let #(hello_b, istate) = initiator_start(local_hello)
 
@@ -27,7 +29,8 @@ pub fn initiator_responder_full_flow_test() {
             Ok(Sent(ke_b2, _rstate2)) -> {
               // Initiator receives responder's KE
               case initiator_handle_message(istate2, ke_b2) {
-                Ok(Received(_, Established(#(_, _)))) -> should.equal(True, True)
+                Ok(Received(_, Established(#(_, _)))) ->
+                  should.equal(True, True)
                 _ -> should.equal(True, False)
               }
             }
