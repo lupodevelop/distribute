@@ -1,9 +1,12 @@
 import distribute/handshake
 import distribute/handshake/state as hs
+import distribute/registry/actor as registry_actor
+import distribute/registry/behaviour as registry_behaviour
 import gleam/erlang/process
-import gleam/option.{None, Some}
+import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/result
+import gleam/string
 
 pub type HandshakeMessage {
   NetworkMessage(BitArray)
@@ -17,6 +20,7 @@ pub fn start_initiator_handshake(
   send_fn: fn(BitArray) -> Nil,
   on_success: fn(String, handshake.MemberMetadata) -> Nil,
   on_failure: fn(String, String) -> Nil,
+  registry: Option(process.Subject(registry_actor.RegistryCommand)),
 ) -> Result(process.Subject(HandshakeMessage), actor.StartError) {
   let initial_state: Result(
     #(hs.HandshakeState, process.Subject(HandshakeMessage), Int),
@@ -44,6 +48,7 @@ pub fn start_initiator_handshake(
           local,
           on_success,
           on_failure,
+          registry,
         )
       }
       Ok(#(current, subject, timeout)), TimeoutMessage(_tag) -> {
@@ -55,6 +60,7 @@ pub fn start_initiator_handshake(
           local,
           on_success,
           on_failure,
+          registry,
         )
       }
       _, _ -> actor.continue(state)
@@ -77,6 +83,7 @@ fn handle_network_message(
   local: handshake.Hello,
   on_success: fn(String, handshake.MemberMetadata) -> Nil,
   on_failure: fn(String, String) -> Nil,
+  registry: Option(process.Subject(registry_actor.RegistryCommand)),
 ) -> actor.Next(
   Result(#(hs.HandshakeState, process.Subject(HandshakeMessage), Int), Nil),
   HandshakeMessage,
@@ -100,8 +107,31 @@ fn handle_network_message(
     Ok(hs.Received(None, hs.ResponderState(..) as new_state)) ->
       actor.continue(Ok(#(new_state, subject, timeout_ms)))
     Ok(hs.Received(_, hs.Established(#(node, ctx)))) -> {
-      on_success(node, handshake.MemberMetadata([], Some(ctx)))
-      actor.stop()
+      case registry {
+        Some(reg) -> {
+          let md = registry_behaviour.Metadata(node, [], "")
+          case registry_actor.register_sync(reg, timeout_ms, node, md) {
+            Ok(_) -> {
+              on_success(node, handshake.MemberMetadata([], Some(ctx)))
+              actor.stop()
+            }
+            Error(e) -> {
+              let reason = case e {
+                registry_behaviour.AlreadyExists -> "already_exists"
+                registry_behaviour.NotFound -> "not_found"
+                registry_behaviour.InvalidArgument(msg) -> msg
+                registry_behaviour.AdapterFailure(msg) -> msg
+              }
+              on_failure(node, string.concat(["registry error: ", reason]))
+              actor.stop()
+            }
+          }
+        }
+        None -> {
+          on_success(node, handshake.MemberMetadata([], Some(ctx)))
+          actor.stop()
+        }
+      }
     }
     Ok(hs.Received(_, hs.Failed(reason))) -> {
       on_failure(local.node_id, reason)
@@ -119,6 +149,7 @@ fn handle_timeout(
   local: handshake.Hello,
   on_success: fn(String, handshake.MemberMetadata) -> Nil,
   on_failure: fn(String, String) -> Nil,
+  registry: Option(process.Subject(registry_actor.RegistryCommand)),
 ) -> actor.Next(
   Result(#(hs.HandshakeState, process.Subject(HandshakeMessage), Int), Nil),
   HandshakeMessage,
@@ -146,8 +177,31 @@ fn handle_timeout(
       actor.stop()
     }
     Ok(hs.Received(_, hs.Established(#(node, ctx)))) -> {
-      on_success(node, handshake.MemberMetadata([], Some(ctx)))
-      actor.stop()
+      case registry {
+        Some(reg) -> {
+          let md = registry_behaviour.Metadata(node, [], "")
+          case registry_actor.register_sync(reg, timeout_ms, node, md) {
+            Ok(_) -> {
+              on_success(node, handshake.MemberMetadata([], Some(ctx)))
+              actor.stop()
+            }
+            Error(e) -> {
+              let reason = case e {
+                registry_behaviour.AlreadyExists -> "already_exists"
+                registry_behaviour.NotFound -> "not_found"
+                registry_behaviour.InvalidArgument(msg) -> msg
+                registry_behaviour.AdapterFailure(msg) -> msg
+              }
+              on_failure(local.node_id, string.concat(["registry error: ", reason]))
+              actor.stop()
+            }
+          }
+        }
+        None -> {
+          on_success(node, handshake.MemberMetadata([], Some(ctx)))
+          actor.stop()
+        }
+      }
     }
     Error(_) -> actor.continue(Ok(#(current, subject, timeout_ms)))
   }
