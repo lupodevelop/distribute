@@ -35,32 +35,70 @@ pub type ConnectError {
   ConnectIgnored
 }
 
-type Dynamic
+/// Opaque value returned by low-level Erlang FFI calls in the
+/// `cluster_ffi` module. This type is intentionally untyped because the
+/// underlying Erlang implementation may return atoms, tuples or other
+/// runtime values. Callers should treat `Dynamic` as an implementation
+/// detail and prefer the high-level, type-safe wrappers exported from
+/// this module (for example `start_node/2`, `connect/1`).
+pub type Dynamic
 
+/// Low-level FFI: start a distributed BEAM node.
+///
+/// Returns a `Dynamic` value produced by the Erlang side. This binding
+/// does no validation and does not classify errors — use `start_node/2`
+/// for input validation and structured error handling.
 @external(erlang, "cluster_ffi", "start_node")
 fn start_node_ffi(name: String, cookie: String) -> Dynamic
 
+/// Low-level FFI: attempt to connect to a remote node.
+///
+/// Returns a `Dynamic` result that must not be inspected directly by
+/// callers; prefer `connect/1` which converts the result to a
+/// `Result(Nil, ConnectError)`.
 @external(erlang, "cluster_ffi", "connect")
 fn connect_ffi(node: String) -> Dynamic
 
+/// Low-level helper: check whether a `Dynamic` result represents a
+/// successful outcome. Implementation detail of the FFI layer.
+///
+/// Returns `True` when the `Dynamic` value encodes a success marker.
 @external(erlang, "cluster_ffi", "is_true")
 fn is_true_ffi(value: Dynamic) -> Bool
 
+/// Low-level helper: check whether a `Dynamic` connect result should be
+/// considered ignored (already connected or a no-op). Used by the FFI.
 @external(erlang, "cluster_ffi", "is_ignored")
 fn is_ignored_ffi(value: Dynamic) -> Bool
 
+/// Low-level FFI: return the list of currently connected node names.
+///
+/// This returns a snapshot `List(String)` of known nodes from the
+/// Erlang runtime. Prefer the wrapper `nodes/0` which exposes a typed
+/// API to the rest of the library.
 @external(erlang, "cluster_ffi", "nodes")
 fn nodes_ffi() -> List(String)
 
+/// Low-level FFI: return the current node name as a string. Use the
+/// typed wrapper `self_node/0` in application code.
 @external(erlang, "cluster_ffi", "self_node")
 fn self_node_ffi() -> String
 
+/// Low-level FFI: ping a remote node. Returns `True` if the node
+/// responded, `False` otherwise. This is a thin wrapper; higher-level
+/// code may add retries or timeouts as needed.
 @external(erlang, "cluster_ffi", "ping")
 fn ping_ffi(node: String) -> Bool
 
+/// Low-level helper: return `True` when the `Dynamic` value is the atom
+/// `ok` on the Erlang side. This function is for FFI internals; use the
+/// library wrappers for robust error handling.
 @external(erlang, "cluster_ffi", "is_ok_atom")
 fn is_ok_atom(value: Dynamic) -> Bool
 
+/// Low-level helper: extract the textual error reason from a `Dynamic`
+/// failure returned by the Erlang FFI. Wrapper functions should convert
+/// this string into structured `StartError` / `ConnectError` values.
 @external(erlang, "cluster_ffi", "get_error_reason")
 fn get_error_reason(value: Dynamic) -> String
 
@@ -170,14 +208,20 @@ fn validate_cookie(cookie: String) -> Result(Nil, StartError) {
 /// Connect to another distributed node.
 /// Returns Ok(Nil) if connected, Error with reason otherwise.
 pub fn connect(node: String) -> Result(Nil, ConnectError) {
-  let result = connect_ffi(node)
-  case is_true_ffi(result) {
-    True -> Ok(Nil)
-    False ->
-      case is_ignored_ffi(result) {
-        True -> Error(ConnectIgnored)
-        False -> Error(NodeNotFound)
+  // Validate node string early to provide fast, type-safe errors.
+  case validate_connect_node(node) {
+    Error(e) -> Error(e)
+    Ok(_) -> {
+      let result = connect_ffi(node)
+      case is_true_ffi(result) {
+        True -> Ok(Nil)
+        False ->
+          case is_ignored_ffi(result) {
+            True -> Error(ConnectIgnored)
+            False -> Error(classify_connect_error(result))
+          }
       }
+    }
   }
 }
 
@@ -186,6 +230,33 @@ pub fn connect(node: String) -> Result(Nil, ConnectError) {
 /// @deprecated Use connect() which returns Result instead
 pub fn connect_bool(node: String) -> Bool {
   is_true_ffi(connect_ffi(node))
+}
+
+// Validate connect input. Ensures the node looks like an Erlang node
+// name (contains an `@`). Returns an immediate typed error if invalid.
+fn validate_connect_node(node: String) -> Result(Nil, ConnectError) {
+  case string.contains(node, "@") {
+    True -> Ok(Nil)
+    False -> Error(NodeNotFound)
+  }
+}
+
+// Classify the `Dynamic` result returned by the FFI into a
+// structured `ConnectError`. This keeps all runtime inspection of
+// untyped values inside this module and exposes a type-safe API.
+fn classify_connect_error(value: Dynamic) -> ConnectError {
+  // If FFI indicates an ignored connect, return that specific variant.
+  case is_ignored_ffi(value) {
+    True -> ConnectIgnored
+    False -> {
+      // Try to extract a textual reason from the FFI and classify it.
+      let reason = get_error_reason(value)
+      case string.contains(reason, "timeout") {
+        True -> ConnectTimeout
+        False -> ConnectNetworkError(reason)
+      }
+    }
+  }
 }
 
 /// Get the list of currently connected nodes.
