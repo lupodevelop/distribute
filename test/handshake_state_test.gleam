@@ -24,7 +24,7 @@ pub fn initiator_responder_full_flow_test() {
         Ok(Sent(acc_ke_b, istate2)) -> {
           // Responder receives Accept+KE
           case responder_handle_message(rstate, acc_ke_b) {
-            Ok(Sent(ke_b2, rstate2)) -> {
+            Ok(Sent(ke_b2, _rstate2)) -> {
               // Initiator receives responder's KE
               case initiator_handle_message(istate2, ke_b2) {
                 Ok(Received(_, Established(#(_, _)))) -> should.equal(True, True)
