@@ -1,5 +1,5 @@
 import distribute/handshake.{Capability, Hello}
-import distribute/handshake_state.{
+import distribute/handshake/state.{
   Failed, Received, Sent, handshake_on_timeout, initiator_start,
 }
 import gleeunit

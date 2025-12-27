@@ -1,5 +1,5 @@
 import distribute/handshake.{Capability, Hello}
-import distribute/handshake_state.{
+import distribute/handshake/state.{
   Established, Received, Sent, initiator_handle_message, initiator_start,
   responder_handle_message, responder_init,
 }
