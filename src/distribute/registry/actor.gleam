@@ -9,6 +9,7 @@ import gleam/erlang/process
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
+import gleam/otp/supervision.{type ChildSpecification, worker}
 import gleam/result
 import gleam/string
 
@@ -51,6 +52,50 @@ pub fn start() -> Result(process.Subject(RegistryCommand), actor.StartError) {
   })
   |> actor.start()
   |> result.map(fn(started) { started.data })
+}
+
+/// Start the registry actor returning the raw `actor.Started` result.
+///
+/// Useful for OTP supervision where the supervisor expects a start
+/// function that returns `Result(actor.Started(data), actor.StartError)`.
+pub fn start_link() -> Result(actor.Started(process.Subject(RegistryCommand)), actor.StartError) {
+  actor.new([])
+  |> actor.on_message(fn(state, msg) {
+    case state, msg {
+      items, Register(node_id, metadata, reply) -> {
+        let new_state = upsert(items, node_id, metadata)
+        process.send(reply, Ok(Nil))
+        actor.continue(new_state)
+      }
+      items, Unregister(node_id, reply) -> {
+        let new_state = remove(items, node_id)
+        process.send(reply, Ok(Nil))
+        actor.continue(new_state)
+      }
+      items, Lookup(node_id, reply) -> {
+        case find(items, node_id) {
+          Some(metadata) -> process.send(reply, Ok(metadata))
+          None -> process.send(reply, Error(Nil))
+        }
+        actor.continue(items)
+      }
+      items, ListAll(reply) -> {
+        let ids = list.map(items, with: fn(pair) { pair.0 })
+        process.send(reply, Ok(ids))
+        actor.continue(items)
+      }
+    }
+  })
+  |> actor.start()
+}
+
+/// Create a `ChildSpecification` for use with `gleam_otp` supervisors.
+///
+/// Example:
+///
+///     children: [distribute/registry/actor.child_spec()]
+pub fn child_spec() -> ChildSpecification(process.Subject(RegistryCommand)) {
+  worker(fn() { start_link() })
 }
 
 /// Typed synchronous helper: register node metadata via the registry actor.
