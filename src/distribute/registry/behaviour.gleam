@@ -9,7 +9,7 @@
 /// The registry stores a small piece of node metadata for each known node.
 /// The metadata is intentionally generic so it can evolve without breaking
 /// adapters that implement the behaviour.
-import distribute/handshake/capability
+import distribute/capability
 
 /// Node identifier used across the system. We keep it as `String` to match
 /// existing APIs (node names like "node@host").
