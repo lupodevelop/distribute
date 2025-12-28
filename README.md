@@ -33,7 +33,7 @@ While Gleam runs on the BEAM, accessing distributed primitives (like connecting 
 ### Type-Safe API (v2.0)
 
 - **Binary Codec System** — Encoder/Decoder types for compile-time safe serialization
-- **Envelope Protocol** — Tag + version validation for protocol mismatch detection  
+- **Envelope Protocol** — Tag + version validation for protocol mismatch detection (see `distribute/codec.wrap_envelope` and `distribute/codec.unwrap_envelope`)
 - **Typed Messaging** — `send_typed`, `call_typed`, `broadcast_typed` with explicit errors
 - **Receiver Helpers** — Convenient `receive_typed` integration with gleam/erlang/process
 - **gleam_otp Compatible** — Use standard `Subject(BitArray)` from gleam/erlang/process
