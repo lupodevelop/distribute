@@ -1,5 +1,5 @@
 name = "distribute"
-version = "1.0.0"
+version = "2.0.0"
 description = "BEAM distributed computing primitives for Gleam. Type-safe wrappers for Erlang distribution, clustering, global registry, process groups, and RPC."
 licences = ["MIT"]
 repository = { type = "github", user = "lupodevelop", repo = "distribute" }
