@@ -2,9 +2,9 @@
 ///
 /// This module provides structured logging capabilities with different levels,
 /// metadata support, and correlation IDs for distributed tracing.
+import distribute/settings
 import gleam/list
 import gleam/option
-import distribute/settings
 
 // Dynamic type used for ad-hoc FFI returns
 type Dynamic

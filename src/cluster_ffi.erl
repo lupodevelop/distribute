@@ -5,16 +5,23 @@
 
 %% start_node(NameListOrBinary, CookieListOrBinary) -> ok | {error, Reason}
 start_node(Name, Cookie) ->
-    case to_atom_safe(Name) of
-        {ok, NameAtom} ->
-            try
-                net_kernel:start([NameAtom]),
-                erlang:set_cookie(node(), to_atom_force(Cookie)),
-                ok
-            catch
-                Class:Reason -> {error, iolist_to_binary(io_lib:format("~p:~p", [Class, Reason]))}
+    NameAtom = to_atom_force(Name),
+    %% Determine if we should use shortnames or longnames based on the host part
+    NameStr = atom_to_list(NameAtom),
+    Type = case string:tokens(NameStr, "@") of
+        [_, Host] ->
+            case lists:member($., Host) of
+                true -> longnames;
+                false -> shortnames
             end;
-        Error -> Error
+        _ -> shortnames %% Fallback
+    end,
+    try
+        net_kernel:start([NameAtom, Type]),
+        erlang:set_cookie(node(), to_atom_force(Cookie)),
+        ok
+    catch
+        Class:Reason -> {error, iolist_to_binary(io_lib:format("~p:~p", [Class, Reason]))}
     end.
 
 connect(Node) ->

@@ -1,6 +1,6 @@
 %% Messaging FFI for Gleam distribute library
 -module(messaging_ffi).
--export([send_global/2, is_ok_atom/1, is_not_found/1, get_error_reason/1]).
+-export([send_global/2, send_binary_global/2, is_ok_atom/1, is_not_found/1, get_error_reason/1]).
 
 send_global(Name, Msg) ->
     case to_atom_safe(Name) of
@@ -8,11 +8,42 @@ send_global(Name, Msg) ->
             case global:whereis_name(A) of
                 undefined -> {error, not_found};
                 Pid when is_pid(Pid) ->
-                    Pid ! Msg,
-                    ok
+                    try
+                        Pid ! Msg,
+                        ok
+                    catch
+                        _:_ -> {error, <<"send_failed">>}
+                    end
             end;
         Error -> Error
     end.
+
+%% Send binary message to a globally registered name
+%% This is used by typed messaging to send envelope-wrapped payloads
+send_binary_global(Name, BinaryMsg) when is_binary(BinaryMsg) ->
+    case to_atom_safe(Name) of
+        {ok, A} ->
+            case global:whereis_name(A) of
+                undefined -> {error, not_found};
+                Pid when is_pid(Pid) ->
+                    %% Validate binary size (max 10MB for safety)
+                    case byte_size(BinaryMsg) > 10485760 of
+                        true -> {error, <<"message_too_large">>};
+                        false ->
+                            try
+                                %% Wrap in {nil, Msg} to match Subject(Pid, Nil)
+                                Pid ! {nil, BinaryMsg},
+                                ok
+                            catch
+                                error:badarg -> {error, <<"invalid_message">>};
+                                _:Reason -> {error, iolist_to_binary(io_lib:format("send_failed: ~p", [Reason]))}
+                            end
+                    end
+            end;
+        Error -> Error
+    end;
+send_binary_global(_Name, _Msg) ->
+    {error, <<"invalid_binary">>}.
 
 %% Helpers for Gleam FFI
 is_ok_atom(ok) -> true;

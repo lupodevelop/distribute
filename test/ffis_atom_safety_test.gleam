@@ -4,12 +4,13 @@ import distribute/groups
 import distribute/log
 import distribute/registry
 import distribute/settings
+import gleam/erlang/process.{type Pid}
 
 @external(erlang, "erlang", "self")
-fn groups_self_ffi() -> groups.Pid
+fn groups_self_ffi() -> Pid
 
 @external(erlang, "erlang", "self")
-fn registry_self_ffi() -> registry.Pid
+fn registry_self_ffi() -> Pid
 
 @external(erlang, "erlang", "unique_integer")
 fn unique_int_ffi() -> Int

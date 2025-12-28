@@ -3,10 +3,10 @@
 /// This module provides a builder pattern for configuring and starting
 /// distributed nodes with a more ergonomic API.
 import distribute/cluster
+import distribute/log
 import gleam/list
 import gleam/option
 import gleam/string
-import distribute/log
 
 // ============================================================================
 // Types

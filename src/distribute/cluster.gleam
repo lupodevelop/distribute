@@ -5,8 +5,8 @@
 ///
 /// It wraps the underlying Erlang `net_kernel` and `erlang` modules to provide
 /// a type-safe API for cluster management.
-import gleam/string
 import distribute/log
+import gleam/string
 
 pub type StartError {
   /// Node name is invalid (must contain '@' and be a valid atom).

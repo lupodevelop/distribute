@@ -1,4 +1,5 @@
 import distribute/cluster
+import distribute/codec
 import distribute/connection_pool
 import distribute/groups
 import distribute/log
@@ -119,12 +120,17 @@ pub fn groups_error_type_exists_test() {
 
 pub fn messaging_send_global_nonexistent_returns_error_test() {
   let result =
-    messaging.send_global("nonexistent_global_name_xyz", "test message")
+    messaging.send_global_typed(
+      "nonexistent_global_name_xyz",
+      "test message",
+      codec.string_encoder(),
+    )
   case result {
     Error(messaging.NameNotFound(_)) -> should.be_true(True)
     Error(messaging.ProcessNotAlive) -> should.be_true(True)
     Error(messaging.NetworkError(_)) -> should.be_true(True)
     Error(messaging.InvalidMessage(_)) -> should.be_true(True)
+    Error(messaging.EncodeFailed(_)) -> should.be_true(True)
     Error(messaging.SendFailed(_)) -> should.be_true(True)
     Ok(_) -> should.fail()
   }
@@ -587,7 +593,11 @@ pub fn messaging_stress_test_many_sends_test() {
   let results =
     list.range(1, 5)
     |> list.map(fn(i) {
-      messaging.send_global(target, "stress_msg_" <> int_to_string(i))
+      messaging.send_global_typed(
+        target,
+        "stress_msg_" <> int_to_string(i),
+        codec.string_encoder(),
+      )
     })
 
   // Count results - they may fail due to non-existent target
@@ -1686,7 +1696,12 @@ pub fn registry_error_variants_test() {
 
 pub fn groups_broadcast_to_empty_group_test() {
   // Broadcasting to empty group should succeed (no-op)
-  let result = groups.broadcast("empty_group_xyz", "test_message")
+  let result =
+    groups.broadcast_typed(
+      "empty_group_xyz",
+      "test_message",
+      codec.string_encoder(),
+    )
   // May succeed or fail depending on pg initialization
   case result {
     Ok(_) -> should.be_true(True)

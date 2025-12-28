@@ -7,23 +7,21 @@
 [![Package Version](https://img.shields.io/hexpm/v/distribute)](https://hex.pm/packages/distribute)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/distribute/)
 
-**Distribute** brings the full power of Erlang's distributed computing to Gleam,
-with an idiomatic and strongly-typed API at the Gleam level.
+**Distribute** brings the full power of Erlang's distributed computing to Gleam, with a **type-safe** and **gleam_otp-integrated** API.
 
-While Gleam runs on the BEAM, accessing distributed primitives (like connecting nodes,
-global registration, or RPC) often requires writing raw Erlang FFI or dealing with
-untyped atoms. **Distribute** addresses this by providing a robust, type-safe Gleam API
-over these primitives, making it easier to build distributed systems without leaving Gleam.
+While Gleam runs on the BEAM, accessing distributed primitives (like connecting nodes, global registration, or RPC) traditionally required dealing with untyped atoms and unsafe Erlang terms. **Distribute v2.0** solves this by providing:
 
-## ⚠️ Type Safety Clarification
+✅ **Type-safe messaging** using binary codecs (`Encoder(a)`, `Decoder(a)`) and `gleam/erlang/process.Subject(BitArray)`  
+✅ **Full gleam_otp integration** — integrates with actors and selectors  
+✅ **Explicit error handling** — all operations return typed `Result` values  
+✅ **Composable codecs** — built-in support for primitives, Option, Result, tuples, and custom types  
+✅ **Production-ready** — comprehensive error handling, deprecated legacy APIs  
 
-Many APIs in this library (node management, registries, groups, etc.)
-leverage Gleam’s static type system to provide safer usage and structured errors.
-However, the contents of distributed messages and generic RPC calls are transmitted
-via Erlang FFI and are not checked by the Gleam compiler.
-Incorrect message shapes or RPC signatures will only fail at runtime.
+> **Note:** Use the `_typed` variants of all functions (e.g., `send_global_typed`, `broadcast_typed`) for full type safety. Legacy untyped functions are deprecated and will be removed in v3.0.  
 
 ## Features
+
+### Core Distributed Primitives
 
 - **Node Management** — Start distributed nodes, connect to peers, and list connected nodes with proper error handling.
 - **Global Registry** — Register and lookup processes across the cluster using a type-safe wrapper around `:global`.
@@ -31,13 +29,33 @@ Incorrect message shapes or RPC signatures will only fail at runtime.
 - **Process Groups** — Join/leave groups and broadcast messages to all members (wrapper around `:pg`).
 - **Remote Monitoring** — Monitor processes and nodes for failure detection across the network.
 - **RPC** — Perform Remote Procedure Calls to any Erlang/Gleam module with timeout control.
+
+### Type-Safe API (v2.0)
+
+- **Binary Codec System** — Encoder/Decoder types for compile-time safe serialization
+- **Envelope Protocol** — Tag + version validation for protocol mismatch detection  
+- **Typed Messaging** — `send_typed`, `call_typed`, `broadcast_typed` with explicit errors
+- **Receiver Helpers** — Convenient `receive_typed` integration with gleam/erlang/process
+- **gleam_otp Compatible** — Use standard `Subject(BitArray)` from gleam/erlang/process
+
+### Advanced Features
+
 - **SWIM-like Membership** — A built-in background service for failure detection, gossip, and cluster membership.
 - **Raft-lite Election** — A lightweight leader election implementation for simple coordination needs.
 
 ## Installation
 
+```toml
+# gleam.toml
+[dependencies]
+gleam_stdlib = ">= 0.43.0"
+gleam_erlang = ">= 0.5.0"
+gleam_otp = ">= 0.1.0"
+distribute = "~> 2.0"
+```
+
 ```sh
-gleam add distribute
+gleam add distribute 
 ```
 
 ## Documentation
@@ -48,21 +66,22 @@ gleam add distribute
   - [Two Nodes Setup](https://hexdocs.pm/distribute/examples-two-nodes.html)
   - [Two Nodes App](https://hexdocs.pm/distribute/examples-two-nodes-app.html)
 
-## Quick Start
+## Quick Start (Type-Safe API)
 
 ### 1. Start a Distributed Node
 
 ```gleam
-import distribute/cluster
+import distribute/node_builder
 import gleam/io
-import gleam/string
 
 pub fn main() {
-  // Start this node as "app@127.0.0.1" with cookie "secret"
-  case cluster.start_node("app@127.0.0.1", "secret") {
-    Ok(Nil) -> io.println("Node started successfully!")
-    Error(err) -> io.println("Failed to start: " <> string.inspect(err))
-  }
+  // Start this node with builder pattern
+  let assert Ok(_) = node_builder.new()
+    |> node_builder.with_name("app@127.0.0.1")
+    |> node_builder.with_cookie("secret")
+    |> node_builder.start()
+  
+  io.println("Node started!")
 }
 ```
 
@@ -81,40 +100,85 @@ pub fn connect_peer() {
 }
 ```
 
-### 3. Register and Send Messages Globally
+### 3. Register and Lookup Processes Globally (Type-Safe)
 
 ```gleam
-import distribute/registry
+import distribute/codec
+import distribute/global
 import distribute/messaging
-import distribute/monitor
+import distribute/receiver
+import distribute/registry
+import gleam/erlang/process
 
-pub fn register_and_send() {
-  // Register current process globally
-  let pid = monitor.self()
-  let _ = registry.register("my_service", pid)
+pub fn register_and_lookup() {
+  // Create a type-safe global subject with encoder/decoder
+  let encoder = codec.string_encoder()
+  let decoder = codec.string_decoder()
+  let global = global.new(encoder, decoder)
+  
+  // Register it globally
+  let _ = registry.register_typed("my_service", global.subject(global))
 
-  // Send a message to a globally registered name
-  let _ = messaging.send_global("my_service", "Hello, world!")
+  // From another node/process: look up the service type-safely
+  let assert Ok(remote_service) = registry.whereis_global(
+    "my_service",
+    encoder,
+    decoder
+  )
+  
+  // Send a typed message through GlobalSubject
+  let _ = global.send(remote_service, "Hello, world!")
+  
+  // Or use messaging API directly
+  let _ = messaging.send_global_typed(
+    "my_service", 
+    "Hello, world!",
+    encoder
+  )
+  
+  // Receive typed messages
+  let assert Ok(msg) = receiver.receive_typed(
+    global.subject(global),
+    decoder,
+    1000
+  )
 }
 ```
 
-### 4. Process Groups
+### 4. Process Groups (Type-Safe)
 
 ```gleam
+import distribute/codec
+import distribute/codec/builder
+import distribute/global
 import distribute/groups
-import distribute/monitor
+
+pub type Task {
+  Task(name: String, id: Int)
+}
 
 pub fn use_groups() {
-  let pid = monitor.self()
+  // Build a codec for Task
+  let #(task_encoder, task_decoder) = builder.custom2(
+    codec.string_encoder(),
+    codec.int_encoder(),
+    codec.string_decoder(),
+    codec.int_decoder(),
+    Task,
+    fn(t) { #(t.name, t.id) },
+  )
+  
+  // Create a global subject for group communication
+  let global = global.new(task_encoder, task_decoder)
 
   // Join a group named "workers"
-  let _ = groups.join("workers", pid)
+  let _ = groups.join_typed("workers", global.subject(global))
 
-  // Broadcast a message to all members of "workers"
-  let _ = groups.broadcast("workers", #("task", 42))
+  // Broadcast a typed message to all members
+  let _ = global.send(global, Task("process_data", 42))
 
-  // Get a list of all members in the group
-  let members = groups.members("workers")
+  // Get members list
+  let members = groups.members_typed("workers")
 }
 ```
 
@@ -178,17 +242,24 @@ pub fn call_remote() {
 | Module | Description |
 |--------|-------------|
 | `distribute/cluster` | Node management: start, connect, ping, list nodes |
-| `distribute/registry` | Global process registration (uses `:global`) |
-| `distribute/messaging` | Send messages to PIDs or global names |
-| `distribute/groups` | Process groups with join/leave/broadcast (uses `:pg`) |
+| `distribute/registry` | Global process registration with type-safe subjects |
+| `distribute/messaging` | Type-safe cross-node messaging with codecs |
+| `distribute/groups` | Process groups with type-safe broadcast |
 | `distribute/monitor` | Monitor processes and nodes |
-| `distribute/remote_call` | RPC to remote nodes |
+| `distribute/remote_call` | Type-safe RPC to remote nodes |
+| `distribute/codec` | Binary encoding/decoding for primitives and composite types |
+| `distribute/codec/builder` | Helpers for building custom type codecs |
+| `distribute/codec/tagged` | Tag and version validation for protocol safety |
+| `distribute/global` | Type-safe global subjects with integrated codecs |
+| `distribute/receiver` | Type-safe message receiving with codecs |
+| `distribute/sugar` | Convenience helpers for common patterns |
+| `distribute/actor` | Simple actor wrappers |
 | `distribute/cluster/membership` | SWIM-like membership with gossip and failure detection |
 | `distribute/cluster/gossip` | Gossip protocol for membership state propagation |
 | `distribute/cluster/health` | Health checks for nodes and cluster |
 | `distribute/election/raft_lite` | Lightweight leader election with term-based voting |
 
-> **Note**: `cluster.connect_bool` is kept for backward compatibility but is deprecated. Please prefer the `Result`-returning `cluster.connect` which provides structured error handling.
+> **Note**: Legacy untyped functions (`send_global`, `broadcast`, `call`) are deprecated and will be removed in v3.0. Use the `_typed` variants with codecs for full type safety.
 
 ## Running Tests
 
@@ -205,6 +276,9 @@ You can run a multi-node SWIM integration test using the provided script:
 ```
 
 This script starts 3 local Erlang nodes, runs the membership service, and verifies gossip convergence.
+
+> **Note:** The legacy wrapper `examples/two_nodes/run_swim_integration.sh` has been removed — run `examples/two_nodes/swim_integration.sh` directly.
+
 
 > **Note**: Scripts under `examples/` are **manual integration demos**. They rely on local node naming (`-sname` + `hostname`) and are not intended to be a CI hard requirement.
 
@@ -257,13 +331,7 @@ This library exposes a small `settings` API which controls behaviour that impact
 Example:
 
 ```gleam
-import settings
-
-pub fn main() {
-  // Secure default — don't allow uncontrolled atom creation
-  settings.set_allow_atom_creation(False)
-
-  // Prdistribute/settings
+import distribute/settings
 
 pub fn main() {
   // Secure default — don't allow uncontrolled atom creation
@@ -307,11 +375,24 @@ Remote calls use a default timeout of 5000ms. Use `remote_call.call_with_timeout
 Example with a custom timeout:
 
 ```gleam
+import distribute/remote_call
 import gleam/io
 import gleam/string
-import distribute/
+
+pub fn call_remote_with_timeout() {
+  // Call erlang:node() on a remote node with a 10s timeout
+  case remote_call.call_with_timeout("other@host", "erlang", "node", [], [], 10_000) {
+    Ok(result) -> io.println("Remote node name: " <> string.inspect(result))
+    Error(remote_call.RpcBadRpc(reason)) -> io.println("RPC failed: " <> reason)
+    Error(_) -> io.println("RPC error")
+  }
 }
 ```
+
+## Documentation
+
+- Main documentation: https://hexdocs.pm/distribute/
+- Examples overview: [examples/README.md](examples/README.md)
 
 ## Examples
 

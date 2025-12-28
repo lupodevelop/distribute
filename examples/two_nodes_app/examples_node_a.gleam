@@ -1,23 +1,27 @@
 import distribute/cluster
 import distribute/cluster/membership
-import distribute/monitor
+import distribute/codec
+import distribute/global
+import distribute/registry
 import gleam/io
-import gleam/option
-import gleam/string
 
 pub fn start() -> Nil {
-  // Start this node in distributed mode (short name)
+  // Start this node in distributed mode
   let _ = cluster.start_node("app_a@127.0.0.1", "cookie_integ")
 
   // Start the membership background service
   membership.start_service(500)
 
-  // Spawn a process that receives messages and prints them
-  let pid = monitor.self()
+  // Create a type-safe global subject
+  let global = global.new(codec.string_encoder(), codec.string_decoder())
 
-  io.println("Node A started (pid: " <> string.inspect(pid) <> ")")
+  // Register it globally as 'calculator'
+  case registry.register_typed("calculator", global.subject(global)) {
+    Ok(_) -> io.println("Node A: 'calculator' registered")
+    Error(_) -> io.println("Node A: Registration failed")
+  }
 
-  // Log current membership and leader (if any)
+  // Log current membership and leader
   let alive = membership.alive()
   io.println("Alive nodes: " <> string.inspect(alive))
   let leader = membership.current_leader()
@@ -26,6 +30,5 @@ pub fn start() -> Nil {
     Error(Nil) -> io.println("No leader elected")
   }
 
-  // Keep the function alive; the integration script will keep the BEAM VM running
   Nil
 }

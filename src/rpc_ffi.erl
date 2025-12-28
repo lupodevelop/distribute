@@ -1,6 +1,6 @@
 %% RPC FFI for Gleam distribute library
 -module(rpc_ffi).
--export([to_atom/1, is_badrpc/1, get_badrpc_reason/1, to_dynamic/1, call_with_timeout/5]).
+-export([to_atom/1, is_badrpc/1, get_badrpc_reason/1, to_dynamic/1, call_with_timeout/5, call_binary_with_timeout/5]).
 
 to_atom(Bin) when is_binary(Bin) ->
 	case catch binary_to_existing_atom(Bin, utf8) of
@@ -24,6 +24,19 @@ to_dynamic(Value) -> Value.
 call_with_timeout(Node, Module, Function, Args, TimeoutMs) ->
 	try
 		rpc:call(Node, Module, Function, Args, TimeoutMs)
+	catch
+		Class:Reason -> {badrpc, iolist_to_binary(io_lib:format("~p:~p", [Class, Reason]))}
+	end.
+
+%% Call with timeout wrapper for RPC that expects binary results
+%% Used for typed RPC where result must be a binary (envelope-wrapped)
+call_binary_with_timeout(Node, Module, Function, Args, TimeoutMs) ->
+	try
+		case rpc:call(Node, Module, Function, Args, TimeoutMs) of
+			{badrpc, _} = BadRpc -> BadRpc;
+			Result when is_binary(Result) -> {ok, Result};
+			Result -> {error, iolist_to_binary(io_lib:format("expected binary, got: ~p", [Result]))}
+		end
 	catch
 		Class:Reason -> {badrpc, iolist_to_binary(io_lib:format("~p:~p", [Class, Reason]))}
 	end.
