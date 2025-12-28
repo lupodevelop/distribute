@@ -6,6 +6,8 @@
 /// When a process is registered globally, it can be looked up by name from any
 /// node in the cluster. If a network partition occurs, the registry will
 /// eventually resolve conflicts when the partition heals.
+import distribute/codec
+import distribute/global
 import distribute/log
 import gleam/dynamic.{type Dynamic}
 import gleam/erlang/process
@@ -102,13 +104,13 @@ fn validate_name(name: String) -> Result(Nil, RegisterError) {
 ///
 /// This registers the owner Pid of the subject.
 ///
-/// ⚠️ **WARNING**: This function discards the Subject's tag.
-/// The `Subject` returned by `whereis_typed` will have a `Nil` tag.
-/// Standard `gleam_otp` actors (started via `actor.start`) require a specific
-/// tag and will **NOT** receive messages sent to the Subject returned by `whereis_typed`.
+/// Recommended: Use global.GlobalSubject and register it with this function.
+/// The GlobalSubject pattern ensures type-safe messaging with encoder/decoder.
 ///
-/// Use this only for processes that accept messages with a `Nil` tag,
-/// such as those started with `receiver.start_global_receiver`.
+/// For GlobalSubject: Create with global.new(encoder, decoder), then register
+/// with register_typed(name, global.subject(global_subject)).
+///
+/// For custom Subject: Works but requires clients to know the message format.
 pub fn register_typed(
   name: String,
   subject: process.Subject(msg),
@@ -186,13 +188,48 @@ pub fn whereis(name: String) -> Result(Pid, Nil) {
   }
 }
 
-/// Look up a globally registered process and return a typed Subject.
+/// Look up a globally registered GlobalSubject (RECOMMENDED).
+/// 
+/// This is the type-safe way to lookup distributed processes.
+/// Returns a GlobalSubject that enforces encoder/decoder usage.
 ///
-/// The returned Subject will have a `Nil` tag.
-/// Ensure the target process accepts messages with a `Nil` tag.
-pub fn whereis_typed(name: String) -> Result(process.Subject(msg), Nil) {
+/// On success, returns a GlobalSubject that can send/receive typed messages.
+/// On error, returns Error(Nil) if the name is not registered.
+pub fn whereis_global(
+  name: String,
+  encoder: codec.Encoder(msg),
+  decoder: codec.Decoder(msg),
+) -> Result(global.GlobalSubject(msg), Nil) {
   case whereis(name) {
-    Ok(pid) -> Ok(process.unsafely_create_subject(pid, dynamic.nil()))
+    Ok(pid) -> Ok(global.from_pid(pid, encoder, decoder))
     Error(Nil) -> Error(Nil)
   }
+}
+
+/// Look up a globally registered process with explicit tag.
+///
+/// Use this when you know the tag of the remote process (e.g., for custom actors).
+/// For GlobalSubject, use whereis_global instead (recommended).
+///
+/// The tag parameter should match the tag used by the remote actor.
+/// For most cases with Nil tags, use dynamic.nil() as the tag.
+pub fn whereis_with_tag(
+  name: String,
+  tag: Dynamic,
+) -> Result(process.Subject(msg), Nil) {
+  case whereis(name) {
+    Ok(pid) -> Ok(process.unsafely_create_subject(pid, tag))
+    Error(Nil) -> Error(Nil)
+  }
+}
+
+/// Look up a globally registered process and return a typed Subject with Nil tag.
+///
+/// ⚠️ **DEPRECATED**: Use `whereis_global` for GlobalSubject or `whereis_with_tag` 
+/// for standard actors where you know the tag.
+///
+/// The returned Subject has a `Nil` tag and won't work with standard gleam_otp actors.
+@deprecated("Use whereis_global for GlobalSubject or whereis_with_tag for custom actors")
+pub fn whereis_typed(name: String) -> Result(process.Subject(msg), Nil) {
+  whereis_with_tag(name, dynamic.nil())
 }
