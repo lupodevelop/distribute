@@ -1,7 +1,7 @@
 import distribute/handshake.{Capability, Hello}
 import distribute/handshake/actor.{start_initiator_handshake}
 import gleam/erlang/process
-import gleam/option.{None, Some}
+import gleam/option.{None}
 import gleeunit
 import gleeunit/should
 
@@ -43,7 +43,14 @@ pub fn initiator_actor_timeout_triggers_failure_test() {
   let send_fn = fn(_bytes) { Nil }
 
   case
-    start_initiator_handshake(local_hello, 50, send_fn, on_success, on_failure, None)
+    start_initiator_handshake(
+      local_hello,
+      50,
+      send_fn,
+      on_success,
+      on_failure,
+      None,
+    )
   {
     Ok(_subject) -> {
       let found = wait_for_failed(test_subject, 40)
