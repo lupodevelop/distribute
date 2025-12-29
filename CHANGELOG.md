@@ -4,6 +4,39 @@ All notable changes for major releases of the project.
 
 ---
 
+## v2.1.0 — 2025-12-28
+
+**Author:** lupodevelop — Scaratti Daniele
+
+### Overview
+This release introduces **capability negotiation** and **protocol versioning** as foundational features for distributed type-safe communication. It enables nodes to exchange capabilities during handshake, negotiate protocol versions, and use the appropriate encoder/decoder based on negotiated versions. This is a critical step toward supporting rolling upgrades and heterogeneous clusters.
+
+### Key highlights
+- **Capability negotiation**: Nodes exchange `NodeCapabilities` during handshake and negotiate compatible protocol versions.
+- **Protocol versioning APIs**:
+  - `protocol_negotiate(local_caps, remote_caps, protocol) -> Option(Int)` — finds the highest compatible version for a protocol
+  - `schema_encode_for_node(schema, value, node) -> Result(BitArray, EncodeError)` — encodes using the negotiated version for a specific node
+  - `schema_decode_from_node(schema, binary, node) -> Result(a, DecodeError)` — decodes using the negotiated version
+- **Registry integration**: Handshake actors automatically store negotiated metadata in the registry for lookup during message encoding/decoding.
+- **Handshake state machine**: Complete flow with Hello → Capabilities → Accept/Reject → Established, including registry-based validation for responder.
+- **Crypto provider behaviour**: Defined pluggable `crypto.Provider` trait with states (Plain, KeyExchangeInProgress, SecureEstablished, Rekeying, Failed) and stub implementation for development.
+- **Validation helpers**: `validate_capabilities(caps)` ensures capability definitions are well-formed (min ≤ max, non-empty protocol names).
+- **Comprehensive test coverage**: Unit tests for negotiation logic (compatible/incompatible ranges, missing protocols), integration tests for handshake ↔ registry ↔ negotiation flow.
+
+### Breaking changes
+- **No breaking changes**: This release is fully backward compatible with v2.0.0. New APIs are additive.
+
+### Migration notes (short)
+1. Define `NodeCapabilities` for your protocols (e.g., `[Capability("my_proto", 1, 3)]`).
+2. Use `schema_encode_for_node` instead of `schema_encode` when communicating with specific nodes to ensure version compatibility.
+3. Start handshake actors with registry integration: `start_initiator_handshake(..., registry: Some(registry_subject))`.
+4. Optionally implement a custom crypto provider by adhering to the `crypto.Provider` behaviour (see documentation).
+
+### Acknowledgement
+This release builds on the type-safe foundation established in v2.0.0 and addresses the need for versioned protocols in distributed systems.
+
+---
+
 ## v2.0.0 — 2025-12-27
 
 **Author:** lupodevelop — Scaratti Daniele
