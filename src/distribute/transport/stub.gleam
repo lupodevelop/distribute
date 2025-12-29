@@ -27,11 +27,11 @@
 //// - Clear error types (TransportError variants)
 //// - No panics; all errors handled explicitly
 
+import distribute/transport/behaviour
 import gleam/dict
 import gleam/int
 import gleam/list
 import gleam/result
-import distribute/transport/behaviour
 
 /// Known nodes for the stub transport (hardcoded for Phase 1).
 const known_nodes = ["node2@host", "node3@host"]
@@ -115,8 +115,7 @@ pub fn broadcast_with_retry(
     |> list.all(fn(res) { result.is_error(res) })
 
   case all_failed {
-    True ->
-      Error(behaviour.AdapterFailure("broadcast: all nodes failed"))
+    True -> Error(behaviour.AdapterFailure("broadcast: all nodes failed"))
     False -> Ok(outcomes)
   }
 }
@@ -177,14 +176,12 @@ fn attempt_send(
 ///
 /// Given base and max from retry policy, returns wait_ms = base * 2^attempt (clamped).
 /// Pure function; just computation.
-fn calculate_backoff(
-  retry_policy: behaviour.RetryPolicy,
-  attempt: Int,
-) -> Int {
+fn calculate_backoff(retry_policy: behaviour.RetryPolicy, attempt: Int) -> Int {
   let base = retry_policy.initial_backoff_ms
   let max_backoff = retry_policy.max_backoff_ms
   // 2^attempt using bit shifting for efficiency
-  let exponent = int.min(attempt, 10)  // Cap to prevent overflow
+  let exponent = int.min(attempt, 10)
+  // Cap to prevent overflow
   let multiplier = bit_shift_left(1, exponent)
   int.min(base * multiplier, max_backoff)
 }
@@ -202,7 +199,8 @@ fn bit_shift_left(n: Int, shift: Int) -> Int {
     7 -> n * 128
     8 -> n * 256
     9 -> n * 512
-    _ -> n * 1024  // fallback for 10+
+    _ -> n * 1024
+    // fallback for 10+
   }
 }
 
