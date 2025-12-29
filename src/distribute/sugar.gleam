@@ -6,7 +6,7 @@ import distribute/codec.{type Decoder, type Encoder}
 import distribute/global
 import distribute/messaging.{type SendError}
 import distribute/receiver.{type ReceiveError}
-import distribute/registry
+import distribute/registry.{register_typed, unregister}
 import gleam/erlang/process
 import gleam/result
 import gleam/string
@@ -98,7 +98,7 @@ pub fn request(
   // Register temporarily
   let temp_name = "request_" <> string.inspect(process.self())
   use _ <- result.try(
-    registry.register_typed(temp_name, global.subject(reply_subject))
+    register_typed(temp_name, global.subject(reply_subject))
     |> result.map_error(fn(_) { RegistrationFailed }),
   )
 
@@ -117,7 +117,7 @@ pub fn request(
   )
 
   // Cleanup
-  let _ = registry.unregister(temp_name)
+  let _ = unregister(temp_name)
 
   Ok(response)
 }

@@ -1,5 +1,6 @@
 import distribute/receiver
 import distribute/registry
+import gleam/dynamic
 import gleam/erlang/process
 import gleeunit
 import gleeunit/should
@@ -27,8 +28,8 @@ pub fn global_registry_test() {
   let name = "global_test_service"
   registry.register_typed(name, subject) |> should.be_ok
 
-  // Look it up
-  let lookup = registry.whereis_typed(name)
+  // Look it up using whereis_with_tag (preferred over deprecated whereis_typed)
+  let lookup = registry.whereis_with_tag(name, dynamic.nil())
   lookup |> should.be_ok
   let assert Ok(found_subject) = lookup
 

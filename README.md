@@ -33,7 +33,7 @@ While Gleam runs on the BEAM, accessing distributed primitives (like connecting 
 ### Type-Safe API (v2.0)
 
 - **Binary Codec System** — Encoder/Decoder types for compile-time safe serialization
-- **Envelope Protocol** — Tag + version validation for protocol mismatch detection  
+- **Envelope Protocol** — Tag + version validation for protocol mismatch detection (see `distribute/codec.wrap_envelope` and `distribute/codec.unwrap_envelope`)
 - **Typed Messaging** — `send_typed`, `call_typed`, `broadcast_typed` with explicit errors
 - **Receiver Helpers** — Convenient `receive_typed` integration with gleam/erlang/process
 - **gleam_otp Compatible** — Use standard `Subject(BitArray)` from gleam/erlang/process
@@ -100,7 +100,7 @@ pub fn connect_peer() {
 }
 ```
 
-### 3. Register and Send Messages Globally (Type-Safe)
+### 3. Register and Lookup Processes Globally (Type-Safe)
 
 ```gleam
 import distribute/codec
@@ -110,24 +110,36 @@ import distribute/receiver
 import distribute/registry
 import gleam/erlang/process
 
-pub fn register_and_send() {
-  // Create a type-safe global subject
-  let global = global.new()
+pub fn register_and_lookup() {
+  // Create a type-safe global subject with encoder/decoder
+  let encoder = codec.string_encoder()
+  let decoder = codec.string_decoder()
+  let global = global.new(encoder, decoder)
   
   // Register it globally
   let _ = registry.register_typed("my_service", global.subject(global))
 
-  // Send a typed message using the codec
+  // From another node/process: look up the service type-safely
+  let assert Ok(remote_service) = registry.whereis_global(
+    "my_service",
+    encoder,
+    decoder
+  )
+  
+  // Send a typed message through GlobalSubject
+  let _ = global.send(remote_service, "Hello, world!")
+  
+  // Or use messaging API directly
   let _ = messaging.send_global_typed(
     "my_service", 
     "Hello, world!",
-    codec.string_encoder()
+    encoder
   )
   
   // Receive typed messages
   let assert Ok(msg) = receiver.receive_typed(
     global.subject(global),
-    codec.string_decoder(),
+    decoder,
     1000
   )
 }
