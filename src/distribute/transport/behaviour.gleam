@@ -96,6 +96,30 @@ pub type DeliveryMetadata =
 pub type IncomingMessage =
   #(NodeId, BitArray, DeliveryMetadata)
 
+/// Retry policy for transport operations.
+///
+/// Controls how failed sends/broadcasts are retried with exponential backoff.
+///
+/// ## Fields
+///
+/// - `max_attempts`: Maximum number of send attempts (1 = no retry)
+/// - `initial_backoff_ms`: Initial backoff duration in milliseconds
+/// - `max_backoff_ms`: Maximum backoff duration (prevents runaway waits)
+pub type RetryPolicy {
+  RetryPolicy(
+    max_attempts: Int,
+    initial_backoff_ms: Int,
+    max_backoff_ms: Int,
+  )
+}
+
+/// Result of a broadcast operation with per-node outcomes.
+///
+/// Maps each node to its delivery result, allowing the caller to handle
+/// partial failures and retry individual nodes if needed.
+pub type BroadcastResult =
+  dict.Dict(NodeId, Result(Nil, TransportError))
+
 /// Configuration options for transport initialization.
 ///
 /// All fields are optional to allow flexibility in adapter implementations.
@@ -108,6 +132,7 @@ pub type IncomingMessage =
 /// - `max_payload_bytes`: Maximum message payload size in bytes
 /// - `connect_timeout_ms`: Timeout for connection attempts
 /// - `heartbeat_interval_ms`: Interval for heartbeat messages (keeps connections alive)
+/// - `retry_policy`: Retry policy for send/broadcast failures
 /// - `capabilities`: Transport capabilities for handshake negotiation
 pub type TransportOpts {
   TransportOpts(
@@ -117,6 +142,7 @@ pub type TransportOpts {
     max_payload_bytes: Option(Int),
     connect_timeout_ms: Option(Int),
     heartbeat_interval_ms: Option(Int),
+    retry_policy: Option(RetryPolicy),
     capabilities: List(TransportCapability),
   )
 }
@@ -243,6 +269,9 @@ pub fn send(node: NodeId, payload: BitArray) -> Result(Nil, TransportError) {
 
 /// Broadcast a binary payload to multiple nodes.
 ///
+/// Returns a `BroadcastResult` containing per-node delivery outcomes.
+/// This allows the caller to detect and handle partial failures gracefully.
+///
 /// This is a **pure function signature**. Implementations will vary based on
 /// the transport adapter architecture (actor-based, synchronous, async).
 ///
@@ -256,23 +285,43 @@ pub fn send(node: NodeId, payload: BitArray) -> Result(Nil, TransportError) {
 ///
 /// ## Returns
 ///
-/// `Result(Nil, TransportError)` indicating success or failure
+/// - `Ok(BroadcastResult)`: At least one node succeeded or some nodes failed
+/// - `Error(TransportError)`: All nodes failed or transport is completely unavailable
 ///
-/// ## Errors
+/// The `BroadcastResult` is a `dict.Dict(NodeId, Result(Nil, TransportError))` where:
+/// - `Ok(Nil)` = message delivered to that node
+/// - `Error(err)` = delivery to that node failed with reason
 ///
-/// - `PayloadTooLarge`: The payload exceeds size limits
-/// - `Backpressure`: The transport is under load
-/// - `Timeout`: The broadcast operation timed out
+/// ## Behavior
 ///
-/// ## Notes
+/// - If **all** nodes fail: Return `Error(TransportError)` (catastrophic failure)
+/// - If **some** nodes fail: Return `Ok(BroadcastResult)` with mixed outcomes
+/// - If **all** nodes succeed: Return `Ok(BroadcastResult)` with all `Ok(Nil)` entries
 ///
-/// Broadcast does not guarantee delivery to all nodes. Partial delivery
-/// may occur if some nodes are unreachable. Check individual node connectivity
-/// for reliability requirements.
+/// Implementations should apply retry policies to each node independently,
+/// allowing fast nodes to complete before slow/failing nodes exhaust retries.
+///
+/// ## Example
+///
+/// ```gleam
+/// let result = broadcast(["node2@host", "node3@host"], payload)
+/// case result {
+///   Ok(outcomes) ->
+///     dict.each(outcomes, fn(node, res) {
+///       case res {
+///         Ok(Nil) -> io.println("Delivered to " <> node)
+///         Error(err) -> io.println("Failed to " <> node)
+///       }
+///     })
+///   Error(TransportError(_)) ->
+///     // All nodes failed or transport is unavailable
+///     io.println("Broadcast failed completely")
+/// }
+/// ```
 pub fn broadcast(
   nodes: List(NodeId),
   payload: BitArray,
-) -> Result(Nil, TransportError) {
+) -> Result(BroadcastResult, TransportError) {
   let _ = nodes
   let _ = payload
   Error(AdapterFailure("not implemented"))
