@@ -1,16 +1,44 @@
 //// BEAM transport adapter using Erlang distribution.
 ////
-//// Reference implementation of TransportAdapter using the BEAM's built-in
-//// Erlang distribution protocol.
+//// This module provides the reference implementation of `TransportAdapter`
+//// using the BEAM's built-in Erlang distribution protocol. It is the default
+//// adapter used by the `distribute/transport` facade.
 ////
 //// ## Features
 ////
-//// - Reliable delivery via Erlang distribution
-//// - Per-node circuit breakers
-//// - Automatic retries with exponential backoff
-//// - Health monitoring and metrics
-//// - OTP actor implementation
+//// - **Reliable delivery** via Erlang distribution (TCP-based)
+//// - **Per-node circuit breakers** to prevent cascading failures
+//// - **Automatic retries** with exponential backoff
+//// - **Health monitoring** and metrics collection
+//// - **OTP actor** implementation for supervision compatibility
+////
+//// ## Architecture
+////
+//// The adapter runs as a supervised OTP actor that handles:
+////
+//// 1. Sending messages to local/remote registered processes
+//// 2. Broadcasting to process groups
+//// 3. Managing subscriptions for incoming messages
+//// 4. Tracking per-peer circuit breaker state
+//// 5. Collecting send/receive metrics
+////
+//// ## Usage
+////
+//// Typically you don't use this module directly. Instead, use the
+//// `distribute/transport` facade which manages a singleton instance.
+////
+//// For custom configurations:
+////
+//// ```gleam
+//// import distribute/transport/adapter
+//// import distribute/transport/beam_adapter
+////
+//// let opts = adapter.default_options("my_adapter")
+//// let adapter = beam_adapter.new()
+//// let assert Ok(handle) = adapter.start(opts)
+//// ```
 
+import distribute/registry
 import distribute/transport/adapter.{type TransportAdapter}
 import distribute/transport/internal/circuit_breaker as cb
 import distribute/transport/internal/retry_policy
@@ -27,11 +55,19 @@ import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/otp/actor
+import gleam/otp/supervision.{type ChildSpecification, worker}
 import gleam/result
 import gleam/string
 
+// =============================================================================
+// Types
+// =============================================================================
+
 /// Commands handled by the BEAM adapter actor.
-type Command {
+///
+/// This type is opaque to prevent external code from sending arbitrary
+/// commands to the actor. Use the `TransportAdapter` interface instead.
+pub opaque type Command {
   Send(
     peer: String,
     payload: BitArray,
@@ -54,7 +90,7 @@ type Command {
   Stop(timeout_ms: Int, reply: Subject(Result(Nil, AdapterError)))
 }
 
-/// Internal state of the BEAM adapter.
+/// Internal state of the BEAM adapter actor.
 type State {
   State(
     name: String,
@@ -74,7 +110,23 @@ type State {
   )
 }
 
-/// Create a new BEAM transport adapter.
+// =============================================================================
+// Public API
+// =============================================================================
+
+/// Create a new BEAM transport adapter instance.
+///
+/// Returns a `TransportAdapter` record with function pointers for all
+/// adapter operations. This allows the adapter to be used polymorphically
+/// with other adapter implementations.
+///
+/// ## Example
+///
+/// ```gleam
+/// let adapter = beam_adapter.new()
+/// let assert Ok(handle) = adapter.start(options)
+/// adapter.send(handle, "peer", payload, opts)
+/// ```
 pub fn new() -> TransportAdapter {
   adapter.TransportAdapter(
     start: beam_start,
@@ -88,10 +140,67 @@ pub fn new() -> TransportAdapter {
   )
 }
 
-/// Start the BEAM adapter.
-fn beam_start(
+/// Create a child specification for OTP supervision.
+///
+/// Use this when adding the adapter to a supervision tree.
+///
+/// ## Example
+///
+/// ```gleam
+/// import gleam/otp/static_supervisor as supervisor
+///
+/// supervisor.new(supervisor.OneForOne)
+/// |> supervisor.add(beam_adapter.child_spec(opts))
+/// |> supervisor.start()
+/// ```
+pub fn child_spec(options: AdapterOptions) -> ChildSpecification(AdapterHandle) {
+  worker(fn() { start_link(options) })
+}
+
+/// Start and return actor.Started for supervision.
+fn start_link(
   options: AdapterOptions,
-) -> Result(AdapterHandle, AdapterError) {
+) -> Result(actor.Started(AdapterHandle), actor.StartError) {
+  let initial_state =
+    State(
+      name: options.name,
+      options: options,
+      circuit_breakers: dict.new(),
+      circuit_policy: cb.default_policy(),
+      retry_policy: retry_policy.default(),
+      subscriptions: dict.new(),
+      next_subscription_id: 1,
+      messages_sent: 0,
+      messages_received: 0,
+      bytes_sent: 0,
+      send_errors: 0,
+      last_error: None,
+      last_error_timestamp_ms: None,
+    )
+
+  case
+    actor.new(initial_state)
+    |> actor.on_message(handle_message)
+    |> actor.start()
+  {
+    Ok(started) -> {
+      // Register the process with the configured name
+      let _ = register_process_by_name(started.pid, options.name)
+      
+      // Store the Subject in registry for later retrieval
+      let subject = started.data
+      let _ = registry.store_subject(options.name, subject)
+      
+      let handle = types.new_handle(options.name, wrap_subject(subject))
+      // Return Started with handle as data
+      Ok(actor.Started(pid: started.pid, data: handle))
+    }
+    Error(err) -> Error(err)
+  }
+}
+
+/// Start the BEAM adapter.
+fn beam_start(options: AdapterOptions) -> Result(AdapterHandle, AdapterError) {
   let initial_state =
     State(
       name: options.name,
@@ -120,9 +229,7 @@ fn beam_start(
       Ok(types.new_handle(options.name, wrap_subject(subject)))
     }
     Error(err) ->
-      Error(types.StartFailed(
-        "Failed to start actor: " <> string.inspect(err),
-      ))
+      Error(types.StartFailed("Failed to start actor: " <> string.inspect(err)))
   }
 }
 
@@ -466,9 +573,7 @@ fn compute_metrics(state: State) -> Dict(String, Dynamic) {
 }
 
 // Helper to extract Subject from handle
-fn get_subject(
-  handle: AdapterHandle,
-) -> Result(Subject(Command), AdapterError) {
+fn get_subject(handle: AdapterHandle) -> Result(Subject(Command), AdapterError) {
   let state = types.handle_state(handle)
   unwrap_subject(state)
   |> result.replace_error(types.InvalidConfiguration("Invalid handle state"))
@@ -499,24 +604,82 @@ fn send_error_to_string(err: SendError) -> String {
   }
 }
 
-fn erlang_send(_peer: String, _payload: BitArray) -> Result(Nil, SendError) {
-  // Simplified - in production use proper Erlang send
-  Ok(Nil)
+fn erlang_send(peer: String, payload: BitArray) -> Result(Nil, SendError) {
+  // Use FFI to send to registered name on remote node
+  // peer format: "name@node" or just "name" for local
+  case do_erlang_send(peer, payload) {
+    Ok(_) -> Ok(Nil)
+    Error(reason) -> {
+      case reason {
+        "not_found" -> Error(types.InvalidPeer(peer))
+        "connection_closed" -> Error(types.ConnectionClosed(peer))
+        "message_too_large" ->
+          Error(types.PayloadTooLarge(bit_array.byte_size(payload), 10_485_760))
+        _ -> Error(types.AdapterFailure(reason))
+      }
+    }
+  }
 }
 
 fn system_time_ms() -> Int {
   do_system_time_ms()
 }
 
-// FFI wrappers for Dynamic/Subject handling
-@external(erlang, "distribute_ffi", "wrap_subject")
+// FFI wrappers for Dynamic/Subject handling and Erlang send
+@external(erlang, "beam_adapter_ffi", "wrap_subject")
 fn wrap_subject(subject: Subject(Command)) -> Dynamic
 
-@external(erlang, "distribute_ffi", "unwrap_subject")
+@external(erlang, "beam_adapter_ffi", "unwrap_subject")
 fn unwrap_subject(dynamic: Dynamic) -> Result(Subject(Command), Nil)
 
-@external(erlang, "distribute_ffi", "to_dynamic")
+@external(erlang, "beam_adapter_ffi", "to_dynamic")
 fn to_dynamic(value: Int) -> Dynamic
+
+@external(erlang, "beam_adapter_ffi", "send_to_registered")
+fn do_erlang_send(peer: String, payload: BitArray) -> Result(Nil, String)
 
 @external(erlang, "erlang", "system_time")
 fn do_system_time_ms() -> Int
+
+// =============================================================================
+// Handle Lookup
+// =============================================================================
+
+/// Get a handle to a running adapter by name.
+///
+/// This function looks up a previously started adapter by its registered name
+/// and returns a handle that can be used with the `TransportAdapter` functions.
+///
+/// The handle is retrieved from the registry where it was stored during
+/// adapter startup. This allows the singleton pattern used by
+/// `distribute/transport` to work correctly.
+///
+/// ## Example
+///
+/// ```gleam
+/// case beam_adapter.get_handle("my_adapter") {
+///   Ok(handle) -> {
+///     let adapter = beam_adapter.new()
+///     adapter.send(handle, "peer", payload, opts)
+///   }
+///   Error(Nil) -> io.println("Adapter not running")
+/// }
+/// ```
+pub fn get_handle(name: String) -> Result(AdapterHandle, Nil) {
+  case registry.lookup_subject(name) {
+    Ok(subject) -> {
+      Ok(types.new_handle(name, wrap_subject(subject)))
+    }
+    Error(_) -> Error(Nil)
+  }
+}
+
+// =============================================================================
+// FFI Declarations
+// =============================================================================
+
+@external(erlang, "beam_adapter_ffi", "register_process_by_name")
+fn register_process_by_name(
+  pid: process.Pid,
+  name: String,
+) -> Result(Nil, AdapterError)
