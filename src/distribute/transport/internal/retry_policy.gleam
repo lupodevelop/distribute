@@ -97,7 +97,8 @@ fn float_power(base: Float, exponent: Float) -> Float {
         2 -> base *. base
         3 -> base *. base *. base
         4 -> base *. base *. base *. base
-        _ -> base *. base *. base *. base // Cap at 4
+        _ -> base *. base *. base *. base
+        // Cap at 4
       }
     }
   }
