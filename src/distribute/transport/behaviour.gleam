@@ -106,11 +106,7 @@ pub type IncomingMessage =
 /// - `initial_backoff_ms`: Initial backoff duration in milliseconds
 /// - `max_backoff_ms`: Maximum backoff duration (prevents runaway waits)
 pub type RetryPolicy {
-  RetryPolicy(
-    max_attempts: Int,
-    initial_backoff_ms: Int,
-    max_backoff_ms: Int,
-  )
+  RetryPolicy(max_attempts: Int, initial_backoff_ms: Int, max_backoff_ms: Int)
 }
 
 /// Result of a broadcast operation with per-node outcomes.
@@ -119,6 +115,69 @@ pub type RetryPolicy {
 /// partial failures and retry individual nodes if needed.
 pub type BroadcastResult =
   dict.Dict(NodeId, Result(Nil, TransportError))
+
+/// Circuit breaker state for a node.
+///
+/// Tracks failure rate and decides when to stop trying a failing node.
+/// Based on the circuit breaker pattern from resilience engineering.
+///
+/// ## States
+///
+/// - `Closed`: Normal operation, requests flow through
+/// - `Open`: Too many failures, requests are blocked
+/// - `HalfOpen`: Testing if node recovered, limited requests allowed
+pub type CircuitState {
+  Closed
+  Open(opened_at_ms: Int)
+  HalfOpen(test_started_at_ms: Int)
+}
+
+/// Circuit breaker configuration.
+///
+/// Controls when a circuit opens/closes based on failure patterns.
+///
+/// ## Fields
+///
+/// - `failure_threshold`: Number of consecutive failures before opening circuit
+/// - `success_threshold`: Number of consecutive successes in HalfOpen to close circuit
+/// - `timeout_ms`: How long to wait in Open state before trying HalfOpen
+/// - `half_open_max_calls`: Maximum concurrent calls allowed in HalfOpen state
+pub type CircuitBreakerPolicy {
+  CircuitBreakerPolicy(
+    failure_threshold: Int,
+    success_threshold: Int,
+    timeout_ms: Int,
+    half_open_max_calls: Int,
+  )
+}
+
+/// Per-node circuit breaker state.
+///
+/// Tracks circuit state and recent outcomes for each node.
+pub type NodeCircuitBreaker {
+  NodeCircuitBreaker(
+    state: CircuitState,
+    consecutive_failures: Int,
+    consecutive_successes: Int,
+    total_failures: Int,
+    total_successes: Int,
+  )
+}
+
+/// Fallback strategy when primary transport fails.
+///
+/// Allows graceful degradation by trying alternative transports.
+///
+/// ## Variants
+///
+/// - `NoFallback`: Fail immediately if primary fails
+/// - `RetryPrimary`: Only retry on the same transport (uses RetryPolicy)
+/// - `FailoverList`: Try transports in order until one succeeds
+pub type FallbackStrategy {
+  NoFallback
+  RetryPrimary(RetryPolicy)
+  FailoverList(fallback_transports: List(String))
+}
 
 /// Configuration options for transport initialization.
 ///
@@ -133,6 +192,8 @@ pub type BroadcastResult =
 /// - `connect_timeout_ms`: Timeout for connection attempts
 /// - `heartbeat_interval_ms`: Interval for heartbeat messages (keeps connections alive)
 /// - `retry_policy`: Retry policy for send/broadcast failures
+/// - `circuit_breaker_policy`: Circuit breaker configuration for per-node failure handling
+/// - `fallback_strategy`: Strategy for handling transport-level failures
 /// - `capabilities`: Transport capabilities for handshake negotiation
 pub type TransportOpts {
   TransportOpts(
@@ -143,6 +204,8 @@ pub type TransportOpts {
     connect_timeout_ms: Option(Int),
     heartbeat_interval_ms: Option(Int),
     retry_policy: Option(RetryPolicy),
+    circuit_breaker_policy: Option(CircuitBreakerPolicy),
+    fallback_strategy: Option(FallbackStrategy),
     capabilities: List(TransportCapability),
   )
 }
