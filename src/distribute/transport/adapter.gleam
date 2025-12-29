@@ -1,23 +1,56 @@
-// Transport Adapter Behaviour
-//
-// Defines the contract for transport adapters in the distribute library.
-// Based on dev/behaviours/transport.txt specification.
-//
-// A transport adapter handles low-level sending and receiving of binary 
-// payloads between peers or groups, providing lifecycle management,
-// health monitoring, and extensibility for different transport mechanisms.
+//// Transport Adapter contract and utilities.
+////
+//// This module defines the behaviour contract that all transport adapters
+//// must implement, along with helper functions for creating default options.
+////
+//// ## Adapter Contract
+////
+//// A transport adapter handles low-level sending and receiving of binary
+//// payloads between peers or groups. It provides:
+////
+//// - Lifecycle management (start/stop)
+//// - Unicast and broadcast messaging
+//// - Subscription-based message reception
+//// - Health monitoring and metrics
+////
+//// ## Implementing an Adapter
+////
+//// To implement a custom adapter, create a module that provides a function
+//// returning a `TransportAdapter` record with all required functions:
+////
+//// ```gleam
+//// pub fn new() -> TransportAdapter {
+////   TransportAdapter(
+////     start: my_start,
+////     stop: my_stop,
+////     send: my_send,
+////     broadcast: my_broadcast,
+////     subscribe: my_subscribe,
+////     unsubscribe: my_unsubscribe,
+////     health: my_health,
+////     metrics: my_metrics,
+////   )
+//// }
+//// ```
+////
+//// See `distribute/transport/beam_adapter` for a reference implementation.
 
 import distribute/transport/types.{
-  type AdapterError, type AdapterHandle, type AdapterOptions, type DeliveryCallback,
-  type HealthStatus, type SendError, type SendOptions, type SubscriptionId,
+  type AdapterError, type AdapterHandle, type AdapterOptions,
+  type DeliveryCallback, type HealthStatus, type SendError, type SendOptions,
+  type SubscriptionId,
 }
 import gleam/dict.{type Dict}
 import gleam/dynamic.{type Dynamic}
 import gleam/option
 
+// =============================================================================
+// Behaviour Contract
+// =============================================================================
+
 /// Transport adapter behaviour contract.
-/// 
-/// All transport implementations must provide these 8 core functions:
+///
+/// All transport implementations must provide these 8 core functions.
 /// 1. start - Initialize and start the adapter
 /// 2. stop - Graceful shutdown with timeout
 /// 3. send - Unicast to a single peer
@@ -69,8 +102,7 @@ pub type TransportAdapter {
     /// Unsubscribe from incoming messages.
     /// 
     /// Remove a previously registered subscription by ID.
-    unsubscribe: fn(AdapterHandle, SubscriptionId) ->
-      Result(Nil, AdapterError),
+    unsubscribe: fn(AdapterHandle, SubscriptionId) -> Result(Nil, AdapterError),
     /// Get current health status.
     /// 
     /// Returns lightweight snapshot: Up, Degraded(reason), or Down(reason).
@@ -104,12 +136,12 @@ pub fn default_options(name: String) -> AdapterOptions {
 }
 
 /// Create default send options.
-/// 
-/// Provides sensible defaults:
-/// - timeout_ms: None (use adapter default)
-/// - priority: None (normal priority)
-/// - reliable: False (best-effort delivery)
-/// - correlation_id: None
+///
+/// Returns options suitable for most use cases:
+/// - No explicit timeout (adapter default applies)
+/// - Normal priority
+/// - Best-effort delivery
+/// - No correlation ID
 pub fn default_send_options() -> SendOptions {
   types.SendOptions(
     timeout_ms: option.None,
@@ -119,8 +151,12 @@ pub fn default_send_options() -> SendOptions {
   )
 }
 
+// =============================================================================
+// Implementation Notes
+// =============================================================================
+//
 // Lifecycle Semantics
-// ===================
+// -------------------
 //
 // 1. start() must allocate resources and begin listening/connecting.
 //    Failure to start should be immediately reported.
@@ -131,10 +167,10 @@ pub fn default_send_options() -> SendOptions {
 // 3. Adapters must avoid blocking the runtime thread; use background
 //    workers for I/O operations.
 //
-// Error Classification and Retry Policy
-// ======================================
+// Error Classification
+// --------------------
 //
-// Transport errors must be classified for upper layers to choose strategy:
+// Transport errors are classified for retry policy decisions:
 //
 // - Transient (retryable with backoff):
 //   ConnectionClosed, Timeout, Backpressure
@@ -143,20 +179,10 @@ pub fn default_send_options() -> SendOptions {
 //   InvalidPeer, PayloadTooLarge, SerializationError
 //
 // - AdapterFailure:
-//   Internal adapter error; escalate to registry for marking unhealthy
+//   Internal adapter error; escalate to registry
 //
-// Hot-reload and Replacement
-// ===========================
-//
-// The registry must be able to stop an adapter and start a replacement
-// with minimal interruption:
-//
-// - start() must be idempotent for new handle instances
-// - stop() must release network bindings and background tasks cleanly
-// - health() should report readiness status after start()
-//
-// Observability and Logging
-// ==========================
+// Observability
+// -------------
 //
 // Adapters should emit structured events for:
 // - adapter_started, adapter_stopped
@@ -164,19 +190,12 @@ pub fn default_send_options() -> SendOptions {
 // - peer_connected, peer_disconnected
 // - message_sent, message_received
 //
-// Events should include context: adapter_name, node_id, peer_id,
-// correlation_id (when available)
-//
 // Security Considerations
-// ========================
+// -----------------------
 //
 // - Do not create atoms from untrusted input
 // - Enforce max_payload_bytes limits
 // - Document encryption/authentication capabilities
-// - Document key management if applicable
-//
-// Testing and Conformance
-// ========================
 //
 // All adapters should pass the standard conformance test suite:
 // - start/stop lifecycle
