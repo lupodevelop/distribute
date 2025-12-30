@@ -110,10 +110,11 @@ pub fn transport_health_test() {
 
 // --- Helpers copied/adapted from conformance test ---
 
-fn start_receiver(name: String, forward_to: process.Subject(BitArray)) -> process.Pid {
-  let pid = process.spawn(fn() {
-    receiver_loop(forward_to)
-  })
+fn start_receiver(
+  name: String,
+  forward_to: process.Subject(BitArray),
+) -> process.Pid {
+  let pid = process.spawn(fn() { receiver_loop(forward_to) })
   let _ = register_process(pid, name)
   pid
 }
