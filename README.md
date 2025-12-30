@@ -258,6 +258,9 @@ pub fn call_remote() {
 | `distribute/cluster/gossip` | Gossip protocol for membership state propagation |
 | `distribute/cluster/health` | Health checks for nodes and cluster |
 | `distribute/election/raft_lite` | Lightweight leader election with term-based voting |
+| `distribute/crypto` | Pluggable crypto layer for secure messaging |
+
+> **⚠️ Crypto Warning:** The default `noop_adapter` provides **NO ACTUAL ENCRYPTION** and is intended for development/testing only. For production, implement a real crypto adapter (TLS, NaCl, etc.).
 
 > **Note**: Legacy untyped functions (`send_global`, `broadcast`, `call`) are deprecated and will be removed in v3.0. Use the `_typed` variants with codecs for full type safety.
 
@@ -393,6 +396,63 @@ pub fn call_remote_with_timeout() {
 
 - Main documentation: https://hexdocs.pm/distribute/
 - Examples overview: [examples/README.md](examples/README.md)
+
+## Crypto Layer
+
+The library includes a pluggable crypto layer with two adapters:
+
+| Adapter | Use Case | Dependencies |
+|---------|----------|--------------|
+| `noop_adapter` | Development/testing | None |
+| `sodium_adapter` | Production | OTP 22+ (built-in crypto) |
+
+### Sodium Adapter
+
+The `sodium_adapter` provides real cryptographic security using:
+- **X25519** for key exchange (Curve25519 ECDH)
+- **ChaCha20-Poly1305** for AEAD encryption
+- **HKDF-SHA256** for key derivation
+
+**No external dependencies required** — uses Erlang's built-in `crypto` module.
+
+### OTP Compatibility
+
+The `sodium_adapter` requires **OTP 22+** for:
+- `crypto:generate_key(ecdh, x25519)` — X25519 key generation
+- `crypto:compute_key(ecdh, ...)` — ECDH shared secret
+- `crypto:crypto_one_time_aead(chacha20_poly1305, ...)` — AEAD encryption
+
+Verify your OTP installation supports the required primitives:
+
+```erlang
+% Check X25519 and ChaCha20-Poly1305 support
+erl -noshell -eval '
+  Curves = crypto:supports(curves),
+  Ciphers = crypto:supports(ciphers),
+  io:format("X25519: ~p~nChaCha20-Poly1305: ~p~n", 
+    [lists:member(x25519, Curves), 
+     lists:member(chacha20_poly1305, Ciphers)]),
+  halt()
+'
+```
+
+### CI Configuration
+
+Add crypto verification to your CI pipeline:
+
+```yaml
+# GitHub Actions example
+- name: Verify OTP crypto support
+  run: |
+    erl -noshell -eval '
+      case {lists:member(x25519, crypto:supports(curves)),
+            lists:member(chacha20_poly1305, crypto:supports(ciphers))} of
+        {true, true} -> halt(0);
+        _ -> halt(1)
+      end
+    '
+```
+
 
 ## Examples
 
