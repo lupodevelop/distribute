@@ -436,23 +436,6 @@ erl -noshell -eval '
 '
 ```
 
-### CI Configuration
-
-Add crypto verification to your CI pipeline:
-
-```yaml
-# GitHub Actions example
-- name: Verify OTP crypto support
-  run: |
-    erl -noshell -eval '
-      case {lists:member(x25519, crypto:supports(curves)),
-            lists:member(chacha20_poly1305, crypto:supports(ciphers))} of
-        {true, true} -> halt(0);
-        _ -> halt(1)
-      end
-    '
-```
-
 
 ## Examples
 
