@@ -4,7 +4,7 @@ All notable changes for major releases of the project.
 
 ---
 
-## v2.1.0 — 2025-12-28
+## v2.1.0 — 2025-01-05
 
 **Author:** lupodevelop — Scaratti Daniele
 
@@ -20,6 +20,7 @@ This release introduces **capability negotiation** and **protocol versioning** a
 - **Registry integration**: Handshake actors automatically store negotiated metadata in the registry for lookup during message encoding/decoding.
 - **Handshake state machine**: Complete flow with Hello → Capabilities → Accept/Reject → Established, including registry-based validation for responder.
 - **Crypto provider behaviour**: Defined pluggable `crypto.Provider` trait with states (Plain, KeyExchangeInProgress, SecureEstablished, Rekeying, Failed) and stub implementation for development.
+- **Added**: sodium-backed crypto adapter (Gleam API and supervision implemented; native/libsodium implementation and secure memory guarantees are still to be completed — experimental/preview).
 - **Validation helpers**: `validate_capabilities(caps)` ensures capability definitions are well-formed (min ≤ max, non-empty protocol names).
 - **Comprehensive test coverage**: Unit tests for negotiation logic (compatible/incompatible ranges, missing protocols), integration tests for handshake ↔ registry ↔ negotiation flow.
 
