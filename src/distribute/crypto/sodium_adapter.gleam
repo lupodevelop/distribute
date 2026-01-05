@@ -92,11 +92,7 @@ pub opaque type Command {
 /// Key material stored in SecureContext.
 /// Contains the AEAD key and master secret for rekeying.
 type KeyMaterial {
-  KeyMaterial(
-    aead_key: BitArray,
-    master_secret: BitArray,
-    rekey_counter: Int,
-  )
+  KeyMaterial(aead_key: BitArray, master_secret: BitArray, rekey_counter: Int)
 }
 
 /// Ephemeral keypair for handshake.
@@ -241,7 +237,10 @@ fn sodium_shutdown(handle: ProviderHandle) -> Result(Nil, CryptoError) {
         Error(_) -> Error(types.ShutdownFailed("Timeout"))
       }
     }
-    Error(err) -> Error(err)
+    Error(_) -> {
+      // Already shutdown or invalid handle — make shutdown idempotent
+      Ok(Nil)
+    }
   }
 }
 
@@ -427,6 +426,10 @@ fn handle_message(state: State, message: Command) -> actor.Next(State, Command) 
     }
 
     Shutdown(reply) -> {
+      // Best-effort: clear references to sensitive data from state by
+      // letting the actor stop and GC reclaim state. For stronger zeroing
+      // of native buffers implement an FFI zeroing function in the
+      // Erlang/Native layer and call it here.
       let _ = registry.remove_stored_subject(state.name)
       process.send(reply, Ok(Nil))
       actor.stop()
@@ -557,19 +560,20 @@ fn handle_handshake_start(
                 }
                 Error(err) -> {
                   process.send(reply, Error(err))
-                  actor.continue(State(
-                    ..state,
-                    handshakes_failed: state.handshakes_failed + 1,
-                  ))
+                  actor.continue(
+                    State(
+                      ..state,
+                      handshakes_failed: state.handshakes_failed + 1,
+                    ),
+                  )
                 }
               }
             }
             Error(err) -> {
               process.send(reply, Error(err))
-              actor.continue(State(
-                ..state,
-                handshakes_failed: state.handshakes_failed + 1,
-              ))
+              actor.continue(
+                State(..state, handshakes_failed: state.handshakes_failed + 1),
+              )
             }
           }
         }
@@ -577,10 +581,9 @@ fn handle_handshake_start(
     }
     Error(err) -> {
       process.send(reply, Error(err))
-      actor.continue(State(
-        ..state,
-        handshakes_failed: state.handshakes_failed + 1,
-      ))
+      actor.continue(
+        State(..state, handshakes_failed: state.handshakes_failed + 1),
+      )
     }
   }
 }
@@ -638,19 +641,17 @@ fn handle_handshake_continue(
             }
             Error(err) -> {
               process.send(reply, Error(err))
-              actor.continue(State(
-                ..state,
-                handshakes_failed: state.handshakes_failed + 1,
-              ))
+              actor.continue(
+                State(..state, handshakes_failed: state.handshakes_failed + 1),
+              )
             }
           }
         }
         Error(err) -> {
           process.send(reply, Error(err))
-          actor.continue(State(
-            ..state,
-            handshakes_failed: state.handshakes_failed + 1,
-          ))
+          actor.continue(
+            State(..state, handshakes_failed: state.handshakes_failed + 1),
+          )
         }
       }
     }
@@ -685,10 +686,7 @@ fn handle_encrypt(
           // Prepend nonce to ciphertext for decryption
           let result = bit_array.concat([nonce, ciphertext])
           process.send(reply, Ok(result))
-          actor.continue(State(
-            ..state,
-            encrypt_count: state.encrypt_count + 1,
-          ))
+          actor.continue(State(..state, encrypt_count: state.encrypt_count + 1))
         }
         Error(err) -> {
           process.send(reply, Error(err))
@@ -717,17 +715,24 @@ fn handle_decrypt(
           let ciphertext_start = 24
           let ciphertext_len =
             bit_array.byte_size(ciphertext_with_nonce) - ciphertext_start
-          case bit_array.slice(ciphertext_with_nonce, ciphertext_start, ciphertext_len) {
+          case
+            bit_array.slice(
+              ciphertext_with_nonce,
+              ciphertext_start,
+              ciphertext_len,
+            )
+          {
             Ok(ciphertext) -> {
               let aad = <<>>
 
-              case ffi_aead_decrypt(key_material.aead_key, nonce, aad, ciphertext) {
+              case
+                ffi_aead_decrypt(key_material.aead_key, nonce, aad, ciphertext)
+              {
                 Ok(plaintext) -> {
                   process.send(reply, Ok(plaintext))
-                  actor.continue(State(
-                    ..state,
-                    decrypt_count: state.decrypt_count + 1,
-                  ))
+                  actor.continue(
+                    State(..state, decrypt_count: state.decrypt_count + 1),
+                  )
                 }
                 Error(err) -> {
                   process.send(reply, Error(err))
@@ -857,6 +862,25 @@ pub fn get_handle(name: String) -> Result(ProviderHandle, Nil) {
 // =============================================================================
 // FFI and Helpers
 // =============================================================================
+// NOTE FOR NATIVE IMPLEMENTORS
+// ------------------------------
+// This adapter relies on a small native (Erlang/C or NIF/Port) layer named
+// `crypto_sodium_ffi` and `crypto_provider_ffi` that must implement the
+// functions declared below. Requirements:
+// - All native functions MUST return `Result(..., CryptoError)` or `Result(..., Nil)`
+//   as declared. Do not raise Erlang exceptions; return Err variants instead.
+// - Sensitive buffers (keys, nonces, master secrets) MUST be stored in
+//   native-managed memory and securely zeroed when no longer needed.
+// - Provide a function to zero wrapped key material (see `zero_key_material`).
+// - Ensure NIFs do not block the scheduler > 1-2ms; use dirty schedulers or
+//   delegate heavy work to ports/threads if needed.
+// - Map native errors to `types.CryptoError` values and never leak raw
+//   key material in error messages or logs.
+// - Export a stable API and include unit tests for each native function.
+
+// The following `@external` declarations define the expected native functions.
+// Implement these in `crypto_sodium_ffi` (Erlang module calling the NIF/port)
+// or directly in a C NIF module named accordingly.
 
 fn get_subject(handle: ProviderHandle) -> Result(Subject(Command), CryptoError) {
   let dyn_state = types.handle_state(handle)
@@ -911,6 +935,15 @@ fn wrap_subject(subject: Subject(Command)) -> Dynamic
 
 @external(erlang, "crypto_provider_ffi", "unwrap_subject")
 fn unwrap_subject(dynamic: Dynamic) -> Result(Subject(Command), Nil)
+
+// Secure-zero native blobs held by `wrap_key_material` or other wrappers.
+// Implementations SHOULD securely overwrite memory and release native buffers.
+@external(erlang, "crypto_sodium_ffi", "zero_key_material")
+fn ffi_zero_key_material(dyn: Dynamic) -> Result(Nil, Nil)
+
+// Generic helper to zero arbitrary Dynamic wrappers managed by the provider
+@external(erlang, "crypto_provider_ffi", "zero_dynamic")
+fn ffi_zero_dynamic(dyn: Dynamic) -> Result(Nil, Nil)
 
 @external(erlang, "crypto_provider_ffi", "register_process_by_name")
 fn register_process_by_name(
