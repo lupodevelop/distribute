@@ -116,7 +116,9 @@ pub fn new() -> CryptoAdapter {
 }
 
 /// Create a child specification for OTP supervision.
-pub fn child_spec(options: ProviderOptions) -> ChildSpecification(ProviderHandle) {
+pub fn child_spec(
+  options: ProviderOptions,
+) -> ChildSpecification(ProviderHandle) {
   worker(fn() { start_link(options) })
 }
 
@@ -198,7 +200,10 @@ fn noop_shutdown(handle: ProviderHandle) -> Result(Nil, CryptoError) {
         Error(_) -> Error(types.ShutdownFailed("Timeout"))
       }
     }
-    Error(err) -> Error(err)
+    Error(_) -> {
+      // Already shutdown or invalid handle — make shutdown idempotent
+      Ok(Nil)
+    }
   }
 }
 
