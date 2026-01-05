@@ -4,3 +4,5 @@
 erl_crash.dump
 **/build
 *.log
+/dev
+todo.md

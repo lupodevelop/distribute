@@ -55,6 +55,15 @@ fn is_pid(value: Dynamic) -> Bool
 @external(erlang, "registry_ffi", "dynamic_to_pid")
 fn dynamic_to_pid(value: Dynamic) -> Pid
 
+@external(erlang, "registry_ffi", "store_subject")
+fn store_subject_ffi(name: String, subject: process.Subject(msg)) -> Dynamic
+
+@external(erlang, "registry_ffi", "get_subject")
+fn get_subject_ffi(name: String) -> Dynamic
+
+@external(erlang, "registry_ffi", "remove_subject")
+fn remove_subject_ffi(name: String) -> Dynamic
+
 /// Classify error reason into structured RegisterError
 fn classify_register_error(reason: String) -> RegisterError {
   case reason {
@@ -233,3 +242,64 @@ pub fn whereis_with_tag(
 pub fn whereis_typed(name: String) -> Result(process.Subject(msg), Nil) {
   whereis_with_tag(name, dynamic.nil())
 }
+
+// ============================================================================
+// Subject Storage API
+// ============================================================================
+// These functions store/retrieve complete Subject values (including their tag)
+// using persistent_term. This is necessary for OTP actors where the tag must
+// be preserved for message routing to work correctly.
+
+/// Store a complete Subject by name.
+///
+/// Unlike `register_typed` which only stores the Pid in Erlang's global registry,
+/// this function stores the entire Subject including its unique tag. This is
+/// essential for OTP actors where the tag is used for message pattern matching.
+///
+/// Use this when you need to retrieve the exact same Subject later, for example
+/// when implementing singleton actors that need to be looked up by name.
+///
+/// The Subject is stored using `persistent_term` which is optimized for
+/// read-heavy, rarely-changing data.
+pub fn store_subject(
+  name: String,
+  subject: process.Subject(msg),
+) -> Result(Nil, RegisterError) {
+  case validate_name(name) {
+    Error(e) -> Error(e)
+    Ok(_) -> {
+      let _ = store_subject_ffi(name, subject)
+      Ok(Nil)
+    }
+  }
+}
+
+/// Retrieve a stored Subject by name.
+///
+/// Returns the exact Subject that was stored with `store_subject`, preserving
+/// the original tag. This allows proper message routing for OTP actors.
+///
+/// Returns Error(Nil) if no Subject is stored under this name.
+pub fn lookup_subject(name: String) -> Result(process.Subject(msg), Nil) {
+  let result = get_subject_ffi(name)
+  case is_ok_tuple(result) {
+    True -> Ok(extract_subject(result))
+    False -> Error(Nil)
+  }
+}
+
+/// Remove a stored Subject by name.
+///
+/// This removes the Subject from persistent_term storage. Note that this
+/// does NOT unregister the process from Erlang's global registry - use
+/// `unregister` for that.
+pub fn remove_stored_subject(name: String) -> Nil {
+  let _ = remove_subject_ffi(name)
+  Nil
+}
+
+@external(erlang, "registry_ffi", "is_ok_tuple")
+fn is_ok_tuple(value: Dynamic) -> Bool
+
+@external(erlang, "registry_ffi", "extract_subject")
+fn extract_subject(value: Dynamic) -> process.Subject(msg)

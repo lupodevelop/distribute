@@ -4,6 +4,7 @@
 /// distributed nodes with a more ergonomic API.
 import distribute/cluster
 import distribute/log
+import distribute/transport
 import gleam/list
 import gleam/option
 import gleam/string
@@ -89,6 +90,15 @@ pub fn start(builder: NodeBuilder) -> Result(NodeResult, cluster.StartError) {
               int_to_string(list.length(start_result.connections)),
             ),
           ])
+
+          // Start transport layer
+          case transport.start_link() {
+            Ok(_) -> log.info("Transport layer started", [])
+            Error(e) ->
+              log.error("Failed to start transport layer", [
+                #("error", string.inspect(e)),
+              ])
+          }
 
           // Connect to peers if specified
           let connect_result = connect_peers(valid_config.peers)
