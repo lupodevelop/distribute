@@ -20,7 +20,8 @@ This release introduces **capability negotiation** and **protocol versioning** a
 - **Registry integration**: Handshake actors automatically store negotiated metadata in the registry for lookup during message encoding/decoding.
 - **Handshake state machine**: Complete flow with Hello → Capabilities → Accept/Reject → Established, including registry-based validation for responder.
 - **Crypto provider behaviour**: Defined pluggable `crypto.Provider` trait with states (Plain, KeyExchangeInProgress, SecureEstablished, Rekeying, Failed) and stub implementation for development.
-- **Added**: sodium-backed crypto adapter (Gleam API and supervision implemented; native/libsodium implementation and secure memory guarantees are still to be completed — experimental/preview).
+- **Added**: `otp_crypto_adapter` — OTP-backed crypto adapter implementing X25519 key exchange, ChaCha20-Poly1305 AEAD, and HKDF-SHA256 using Erlang's `:crypto` (OTP 22+). This adapter is functional and suitable for messaging between nodes.
+- **Added (stub)**: `sodium_adapter` scaffold reserved for a future native/libsodium implementation (NIF/port). The scaffold preserves the API but the native secure-memory guarantees (sodium_malloc/sodium_memzero/mlock) are not implemented yet — experimental/preview.
 - **Validation helpers**: `validate_capabilities(caps)` ensures capability definitions are well-formed (min ≤ max, non-empty protocol names).
 - **Comprehensive test coverage**: Unit tests for negotiation logic (compatible/incompatible ranges, missing protocols), integration tests for handshake ↔ registry ↔ negotiation flow.
 
