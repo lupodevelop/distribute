@@ -2,7 +2,8 @@
 ///
 /// This module provides utilities for receiving and decoding messages using
 /// the codec system, integrating seamlessly with gleam/erlang/process selectors.
-import distribute/codec.{type DecodeError, type Decoder}
+import distribute/codec.{type DecodeError, type Decoder, type Encoder}
+import distribute/global
 import gleam/dynamic as dyn
 import gleam/erlang/process.{type Selector, type Subject}
 import gleam/otp/actor
@@ -245,4 +246,56 @@ fn global_loop(
     }
     Error(_) -> global_loop(state, subject, decoder, handler)
   }
+}
+
+/// Start a typed actor that returns a GlobalSubject (RECOMMENDED).
+///
+/// This is the recommended way to create type-safe actors for distributed use.
+/// The returned `GlobalSubject` enforces encoder/decoder usage and can be
+/// registered globally with `registry.register_typed`.
+///
+/// Malformed messages are silently ignored.
+///
+/// ## Parameters
+///
+/// - `initial_state`: The initial state of the actor.
+/// - `encoder`: The encoder for outgoing messages (used by clients).
+/// - `decoder`: The decoder for incoming messages.
+/// - `handler`: The message handler function returning `Next(state)`.
+///
+/// ## Returns
+///
+/// A `GlobalSubject(msg)` that can be used for type-safe messaging.
+///
+/// ## Example
+///
+/// ```gleam
+/// pub type Request {
+///   GetCount
+///   Increment
+/// }
+///
+/// let actor = receiver.start_typed_actor(
+///   0,
+///   my_encoder(),
+///   my_decoder(),
+///   fn(msg, count) {
+///     case msg {
+///       GetCount -> {
+///         // Send response logic here
+///         receiver.Continue(count)
+///       }
+///       Increment -> receiver.Continue(count + 1)
+///     }
+///   },
+/// )
+/// ```
+pub fn start_typed_actor(
+  initial_state: state,
+  encoder: Encoder(msg),
+  decoder: Decoder(msg),
+  handler: fn(msg, state) -> Next(state),
+) -> global.GlobalSubject(msg) {
+  let subject = start_global_receiver(initial_state, decoder, handler)
+  global.from_subject(subject, encoder, decoder)
 }
