@@ -20,7 +20,7 @@ import gleeunit/should
 // =============================================================================
 
 @external(erlang, "crypto_sodium_ffi", "gen_keypair")
-fn ffi_gen_keypair() -> Result(#(BitArray, BitArray), Nil)
+fn ffi_gen_keypair() -> Result(#(BitArray, BitArray), term)
 
 @external(erlang, "crypto_sodium_ffi", "aead_encrypt")
 fn ffi_aead_encrypt(
@@ -28,7 +28,7 @@ fn ffi_aead_encrypt(
   nonce: BitArray,
   aad: BitArray,
   plaintext: BitArray,
-) -> Result(BitArray, Nil)
+) -> Result(BitArray, term)
 
 @external(erlang, "crypto_sodium_ffi", "aead_decrypt")
 fn ffi_aead_decrypt(
@@ -36,7 +36,7 @@ fn ffi_aead_decrypt(
   nonce: BitArray,
   aad: BitArray,
   ciphertext: BitArray,
-) -> Result(BitArray, Nil)
+) -> Result(BitArray, term)
 
 @external(erlang, "crypto_sodium_ffi", "hkdf")
 fn ffi_hkdf(
@@ -44,7 +44,7 @@ fn ffi_hkdf(
   ikm: BitArray,
   info: BitArray,
   len: Int,
-) -> Result(BitArray, Nil)
+) -> Result(BitArray, term)
 
 @external(erlang, "crypto_sodium_ffi", "random_bytes")
 fn ffi_random_bytes(n: Int) -> BitArray

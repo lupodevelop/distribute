@@ -9,7 +9,7 @@
 //// - Concurrency and error handling
 ////
 
-import distribute/crypto/sodium_adapter
+import distribute/crypto/otp_crypto_adapter
 import distribute/crypto/types
 import gleam/bit_array
 import gleam/erlang/process
@@ -28,8 +28,8 @@ pub fn sodium_init_and_shutdown_test() {
   let name = "test_sodium_lifecycle"
   let assert Ok(_) =
     test_helpers.with_provider_module_checked(
-      sodium_adapter.new,
-      sodium_adapter.get_handle,
+      otp_crypto_adapter.new,
+      otp_crypto_adapter.get_handle,
       name,
       fn(provider, handle) {
         // Check health
@@ -49,12 +49,12 @@ pub fn sodium_get_handle_after_init_test() {
   let name = "test_sodium_handle"
   let assert Ok(_) =
     test_helpers.with_provider_module_checked(
-      sodium_adapter.new,
-      sodium_adapter.get_handle,
+      otp_crypto_adapter.new,
+      otp_crypto_adapter.get_handle,
       name,
       fn(_provider, _handle) {
         // Get handle by name
-        let handle_result = sodium_adapter.get_handle(name)
+        let handle_result = otp_crypto_adapter.get_handle(name)
         should.be_ok(handle_result)
 
         Nil
@@ -70,8 +70,8 @@ pub fn sodium_handshake_initiator_creates_pending_test() {
   let name = "test_sodium_handshake_init"
   let assert Ok(_) =
     test_helpers.with_provider_module_checked(
-      sodium_adapter.new,
-      sodium_adapter.get_handle,
+      otp_crypto_adapter.new,
+      otp_crypto_adapter.get_handle,
       name,
       fn(provider, handle) {
         let local = "node_a@localhost"
@@ -104,8 +104,8 @@ pub fn sodium_handshake_responder_derives_key_test() {
   let name = "test_sodium_handshake_resp"
   let assert Ok(_) =
     test_helpers.with_provider_module_checked(
-      sodium_adapter.new,
-      sodium_adapter.get_handle,
+      otp_crypto_adapter.new,
+      otp_crypto_adapter.get_handle,
       name,
       fn(provider, handle) {
         let local = "node_b@localhost"
@@ -156,13 +156,13 @@ pub fn sodium_full_handshake_between_two_providers_test() {
   let name_b = "test_sodium_node_b"
   let assert Ok(_) =
     test_helpers.with_provider_module(
-      sodium_adapter.new,
+      otp_crypto_adapter.new,
       name_a,
       fn(provider_a, handle_a) {
         let assert Ok(_) =
           test_helpers.with_provider_module_checked(
-            sodium_adapter.new,
-            sodium_adapter.get_handle,
+            otp_crypto_adapter.new,
+            otp_crypto_adapter.get_handle,
             name_b,
             fn(provider_b, handle_b) {
               let node_a = "node_a@localhost"
@@ -210,14 +210,14 @@ pub fn sodium_encrypt_decrypt_roundtrip_test() {
   let name_b = "test_sodium_enc_b"
   let assert Ok(_) =
     test_helpers.with_provider_module_checked(
-      sodium_adapter.new,
-      sodium_adapter.get_handle,
+      otp_crypto_adapter.new,
+      otp_crypto_adapter.get_handle,
       name_a,
       fn(provider_a, handle_a) {
         let assert Ok(_) =
           test_helpers.with_provider_module_checked(
-            sodium_adapter.new,
-            sodium_adapter.get_handle,
+            otp_crypto_adapter.new,
+            otp_crypto_adapter.get_handle,
             name_b,
             fn(provider_b, handle_b) {
               let node_a = "node_a@localhost"
@@ -270,12 +270,12 @@ pub fn sodium_encrypt_multiple_messages_test() {
   let name_b = "test_sodium_multi_enc_b"
   let assert Ok(_) =
     test_helpers.with_provider_module(
-      sodium_adapter.new,
+      otp_crypto_adapter.new,
       name_a,
       fn(provider_a, handle_a) {
         let assert Ok(_) =
           test_helpers.with_provider_module(
-            sodium_adapter.new,
+            otp_crypto_adapter.new,
             name_b,
             fn(provider_b, handle_b) {
               let node_a = "node_a@localhost"
@@ -329,17 +329,17 @@ pub fn sodium_decrypt_with_wrong_key_fails_test() {
   let name_c = "test_sodium_wrong_key_c"
   let assert Ok(_) =
     test_helpers.with_provider_module(
-      sodium_adapter.new,
+      otp_crypto_adapter.new,
       name_a,
       fn(provider_a, handle_a) {
         let assert Ok(_) =
           test_helpers.with_provider_module(
-            sodium_adapter.new,
+            otp_crypto_adapter.new,
             name_b,
             fn(provider_b, handle_b) {
               let assert Ok(_) =
                 test_helpers.with_provider_module(
-                  sodium_adapter.new,
+                  otp_crypto_adapter.new,
                   name_c,
                   fn(provider_c, handle_c) {
                     let node_a = "node_a@localhost"
@@ -426,12 +426,12 @@ pub fn sodium_rekey_changes_key_id_test() {
   let name_b = "test_sodium_rekey_b"
   let assert Ok(_) =
     test_helpers.with_provider_module(
-      sodium_adapter.new,
+      otp_crypto_adapter.new,
       name_a,
       fn(provider_a, handle_a) {
         let assert Ok(_) =
           test_helpers.with_provider_module(
-            sodium_adapter.new,
+            otp_crypto_adapter.new,
             name_b,
             fn(provider_b, handle_b) {
               let node_a = "node_a@localhost"
@@ -476,7 +476,7 @@ pub fn sodium_rekey_without_context_fails_test() {
   let name = "test_sodium_rekey_fail"
   let assert Ok(_) =
     test_helpers.with_provider_module(
-      sodium_adapter.new,
+      otp_crypto_adapter.new,
       name,
       fn(provider, handle) {
         // Rekey without establishing context first
@@ -503,12 +503,12 @@ pub fn sodium_metrics_track_operations_test() {
   let name_b = "test_sodium_metrics_b"
   let assert Ok(_) =
     test_helpers.with_provider_module(
-      sodium_adapter.new,
+      otp_crypto_adapter.new,
       name_a,
       fn(provider_a, handle_a) {
         let assert Ok(_) =
           test_helpers.with_provider_module(
-            sodium_adapter.new,
+            otp_crypto_adapter.new,
             name_b,
             fn(provider_b, handle_b) {
               let node_a = "node_a@localhost"
@@ -564,7 +564,7 @@ pub fn sodium_health_returns_up_test() {
   let name = "test_sodium_health"
   let assert Ok(_) =
     test_helpers.with_provider_module(
-      sodium_adapter.new,
+      otp_crypto_adapter.new,
       name,
       fn(provider, handle) {
         let health = { provider.health }(handle)
@@ -591,11 +591,11 @@ pub fn concurrent_handshakes_test() {
       let name_b = "con_b_" <> int.to_string(i)
 
       test_helpers.with_provider_module(
-        sodium_adapter.new,
+        otp_crypto_adapter.new,
         name_a,
         fn(provider_a, handle_a) {
           test_helpers.with_provider_module(
-            sodium_adapter.new,
+            otp_crypto_adapter.new,
             name_b,
             fn(provider_b, handle_b) {
               let _ =
