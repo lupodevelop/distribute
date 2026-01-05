@@ -9,7 +9,6 @@
 //// - Concurrency and error handling
 ////
 
-import distribute/crypto/adapter
 import distribute/crypto/sodium_adapter
 import distribute/crypto/types
 import gleam/bit_array
@@ -33,16 +32,17 @@ pub fn sodium_init_and_shutdown_test() {
       sodium_adapter.get_handle,
       name,
       fn(provider, handle) {
-      // Check health
-      let health = { provider.health }(handle)
-      case health {
-        types.Up -> Nil
-        types.Degraded(_) -> Nil
-        types.Down(reason) -> panic as { "Unexpected down: " <> reason }
-      }
+        // Check health
+        let health = { provider.health }(handle)
+        case health {
+          types.Up -> Nil
+          types.Degraded(_) -> Nil
+          types.Down(reason) -> panic as { "Unexpected down: " <> reason }
+        }
 
-      Nil
-    })
+        Nil
+      },
+    )
 }
 
 pub fn sodium_get_handle_after_init_test() {
@@ -53,12 +53,13 @@ pub fn sodium_get_handle_after_init_test() {
       sodium_adapter.get_handle,
       name,
       fn(_provider, _handle) {
-      // Get handle by name
-      let handle_result = sodium_adapter.get_handle(name)
-      should.be_ok(handle_result)
+        // Get handle by name
+        let handle_result = sodium_adapter.get_handle(name)
+        should.be_ok(handle_result)
 
-      Nil
-    })
+        Nil
+      },
+    )
 }
 
 // =============================================================================
@@ -73,29 +74,30 @@ pub fn sodium_handshake_initiator_creates_pending_test() {
       sodium_adapter.get_handle,
       name,
       fn(provider, handle) {
-      let local = "node_a@localhost"
-      let remote = "node_b@localhost"
+        let local = "node_a@localhost"
+        let remote = "node_b@localhost"
 
-      // Start handshake as initiator (no initial message)
-      let result = { provider.handshake_start }(handle, local, remote, None)
-      should.be_ok(result)
+        // Start handshake as initiator (no initial message)
+        let result = { provider.handshake_start }(handle, local, remote, None)
+        should.be_ok(result)
 
-      let assert Ok(handshake_result) = result
-      case handshake_result {
-        types.Continue(state, Some(msg)) -> {
-          should.equal(msg.message_type, "ephemeral_pubkey")
-          should.equal(bit_array.byte_size(msg.payload), 32)
-          types.handshake_stage(state)
-          |> should.equal(types.KeyExchangeInProgress)
+        let assert Ok(handshake_result) = result
+        case handshake_result {
+          types.Continue(state, Some(msg)) -> {
+            should.equal(msg.message_type, "ephemeral_pubkey")
+            should.equal(bit_array.byte_size(msg.payload), 32)
+            types.handshake_stage(state)
+            |> should.equal(types.KeyExchangeInProgress)
+          }
+          types.Continue(_, None) -> panic as "Expected message in Continue"
+          types.Established(_) -> panic as "Expected Continue, got Established"
+          types.HandshakeError(_) ->
+            panic as "Expected Continue, got HandshakeError"
         }
-        types.Continue(_, None) -> panic as "Expected message in Continue"
-        types.Established(_) -> panic as "Expected Continue, got Established"
-        types.HandshakeError(_) ->
-          panic as "Expected Continue, got HandshakeError"
-      }
 
-      Nil
-    })
+        Nil
+      },
+    )
 }
 
 pub fn sodium_handshake_responder_derives_key_test() {
@@ -106,89 +108,97 @@ pub fn sodium_handshake_responder_derives_key_test() {
       sodium_adapter.get_handle,
       name,
       fn(provider, handle) {
-      let local = "node_b@localhost"
-      let remote = "node_a@localhost"
+        let local = "node_b@localhost"
+        let remote = "node_a@localhost"
 
-      let peer_pub_key = <<
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-        21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
-      >>
+        let peer_pub_key = <<
+          1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+          21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32,
+        >>
 
-      let initial_msg =
-        types.HandshakeMessage(
-          message_type: "ephemeral_pubkey",
-          payload: peer_pub_key,
-          metadata: None,
-        )
+        let initial_msg =
+          types.HandshakeMessage(
+            message_type: "ephemeral_pubkey",
+            payload: peer_pub_key,
+            metadata: None,
+          )
 
-      let result =
-        { provider.handshake_start }(handle, local, remote, Some(initial_msg))
-      should.be_ok(result)
+        let result =
+          { provider.handshake_start }(handle, local, remote, Some(initial_msg))
+        should.be_ok(result)
 
-      let assert Ok(handshake_result) = result
-      case handshake_result {
-        types.Continue(state, Some(msg)) -> {
-          should.equal(msg.message_type, "ephemeral_pubkey_response")
-          should.equal(bit_array.byte_size(msg.payload), 32)
-          types.handshake_stage(state) |> should.equal(types.SecureEstablished)
-        }
-        types.Continue(_, None) -> panic as "Expected message in Continue"
-        types.Established(_) -> Nil
-        types.HandshakeError(err) ->
-          panic as {
-            "Expected Continue, got HandshakeError: " <> string.inspect(err)
+        let assert Ok(handshake_result) = result
+        case handshake_result {
+          types.Continue(state, Some(msg)) -> {
+            should.equal(msg.message_type, "ephemeral_pubkey_response")
+            should.equal(bit_array.byte_size(msg.payload), 32)
+            types.handshake_stage(state)
+            |> should.equal(types.SecureEstablished)
           }
-      }
+          types.Continue(_, None) -> panic as "Expected message in Continue"
+          types.Established(_) -> Nil
+          types.HandshakeError(err) ->
+            panic as {
+              "Expected Continue, got HandshakeError: " <> string.inspect(err)
+            }
+        }
 
-      let ctx = { provider.secure_context }(handle, remote)
-      should.be_some(ctx)
+        let ctx = { provider.secure_context }(handle, remote)
+        should.be_some(ctx)
 
-      Nil
-    })
+        Nil
+      },
+    )
 }
 
 pub fn sodium_full_handshake_between_two_providers_test() {
   let name_a = "test_sodium_node_a"
   let name_b = "test_sodium_node_b"
   let assert Ok(_) =
-    test_helpers.with_provider_module(sodium_adapter.new, name_a, fn(provider_a, handle_a) {
-      let assert Ok(_) =
-        test_helpers.with_provider_module_checked(
-          sodium_adapter.new,
-          sodium_adapter.get_handle,
-          name_b,
-          fn(provider_b, handle_b) {
-          let node_a = "node_a@localhost"
-          let node_b = "node_b@localhost"
+    test_helpers.with_provider_module(
+      sodium_adapter.new,
+      name_a,
+      fn(provider_a, handle_a) {
+        let assert Ok(_) =
+          test_helpers.with_provider_module_checked(
+            sodium_adapter.new,
+            sodium_adapter.get_handle,
+            name_b,
+            fn(provider_b, handle_b) {
+              let node_a = "node_a@localhost"
+              let node_b = "node_b@localhost"
 
-          // Step 1: A initiates handshake
-          let assert Ok(types.Continue(state_a, Some(msg_a))) =
-            { provider_a.handshake_start }(handle_a, node_a, node_b, None)
+              // Step 1: A initiates handshake
+              let assert Ok(types.Continue(state_a, Some(msg_a))) =
+                { provider_a.handshake_start }(handle_a, node_a, node_b, None)
 
-          // Step 2: B receives A's public key, responds with own
-          let assert Ok(types.Continue(_state_b, Some(msg_b))) =
-            { provider_b.handshake_start }(
-              handle_b,
-              node_b,
-              node_a,
-              Some(msg_a),
-            )
+              // Step 2: B receives A's public key, responds with own
+              let assert Ok(types.Continue(_state_b, Some(msg_b))) =
+                { provider_b.handshake_start }(
+                  handle_b,
+                  node_b,
+                  node_a,
+                  Some(msg_a),
+                )
 
-          // Step 3: A receives B's response, completes handshake
-          let assert Ok(types.Established(ctx_a)) =
-            { provider_a.handshake_continue }(handle_a, state_a, msg_b)
+              // Step 3: A receives B's response, completes handshake
+              let assert Ok(types.Established(ctx_a)) =
+                { provider_a.handshake_continue }(handle_a, state_a, msg_b)
 
-          // Both should now have secure contexts
-          should.be_some({ provider_a.secure_context }(handle_a, node_b))
-          should.be_some({ provider_b.secure_context }(handle_b, node_a))
+              // Both should now have secure contexts
+              should.be_some({ provider_a.secure_context }(handle_a, node_b))
+              should.be_some({ provider_b.secure_context }(handle_b, node_a))
 
-          types.context_stage(ctx_a) |> should.equal(types.SecureEstablished)
+              types.context_stage(ctx_a)
+              |> should.equal(types.SecureEstablished)
 
-          Nil
-        })
+              Nil
+            },
+          )
 
-      Nil
-    })
+        Nil
+      },
+    )
 }
 
 // =============================================================================
@@ -204,103 +214,113 @@ pub fn sodium_encrypt_decrypt_roundtrip_test() {
       sodium_adapter.get_handle,
       name_a,
       fn(provider_a, handle_a) {
-      let assert Ok(_) =
-        test_helpers.with_provider_module_checked(
-          sodium_adapter.new,
-          sodium_adapter.get_handle,
-          name_b,
-          fn(provider_b, handle_b) {
-          let node_a = "node_a@localhost"
-          let node_b = "node_b@localhost"
+        let assert Ok(_) =
+          test_helpers.with_provider_module_checked(
+            sodium_adapter.new,
+            sodium_adapter.get_handle,
+            name_b,
+            fn(provider_b, handle_b) {
+              let node_a = "node_a@localhost"
+              let node_b = "node_b@localhost"
 
-          // Complete handshake
-          let assert Ok(types.Continue(state_a, Some(msg_a))) =
-            { provider_a.handshake_start }(handle_a, node_a, node_b, None)
-          let assert Ok(types.Continue(_state_b, Some(msg_b))) =
-            { provider_b.handshake_start }(
-              handle_b,
-              node_b,
-              node_a,
-              Some(msg_a),
-            )
-          let assert Ok(types.Established(_)) =
-            { provider_a.handshake_continue }(handle_a, state_a, msg_b)
+              // Complete handshake
+              let assert Ok(types.Continue(state_a, Some(msg_a))) =
+                { provider_a.handshake_start }(handle_a, node_a, node_b, None)
+              let assert Ok(types.Continue(_state_b, Some(msg_b))) =
+                { provider_b.handshake_start }(
+                  handle_b,
+                  node_b,
+                  node_a,
+                  Some(msg_a),
+                )
+              let assert Ok(types.Established(_)) =
+                { provider_a.handshake_continue }(handle_a, state_a, msg_b)
 
-          // Get contexts
-          let assert Some(ctx_a) =
-            { provider_a.secure_context }(handle_a, node_b)
-          let assert Some(ctx_b) =
-            { provider_b.secure_context }(handle_b, node_a)
+              // Get contexts
+              let assert Some(ctx_a) =
+                { provider_a.secure_context }(handle_a, node_b)
+              let assert Some(ctx_b) =
+                { provider_b.secure_context }(handle_b, node_a)
 
-          // A encrypts message
-          let plaintext = <<"Hello, secure world!">>
-          let assert Ok(ciphertext) =
-            { provider_a.encrypt }(handle_a, ctx_a, plaintext)
+              // A encrypts message
+              let plaintext = <<"Hello, secure world!">>
+              let assert Ok(ciphertext) =
+                { provider_a.encrypt }(handle_a, ctx_a, plaintext)
 
-          should.be_true(
-            bit_array.byte_size(ciphertext) > bit_array.byte_size(plaintext),
+              should.be_true(
+                bit_array.byte_size(ciphertext) > bit_array.byte_size(plaintext),
+              )
+
+              // B decrypts message
+              let assert Ok(decrypted) =
+                { provider_b.decrypt }(handle_b, ctx_b, ciphertext)
+              should.equal(decrypted, plaintext)
+
+              Nil
+            },
           )
 
-          // B decrypts message
-          let assert Ok(decrypted) =
-            { provider_b.decrypt }(handle_b, ctx_b, ciphertext)
-          should.equal(decrypted, plaintext)
-
-          Nil
-        })
-
-      Nil
-    })
+        Nil
+      },
+    )
 }
 
 pub fn sodium_encrypt_multiple_messages_test() {
   let name_a = "test_sodium_multi_enc_a"
   let name_b = "test_sodium_multi_enc_b"
   let assert Ok(_) =
-    test_helpers.with_provider_module(sodium_adapter.new, name_a, fn(provider_a, handle_a) {
-      let assert Ok(_) =
-        test_helpers.with_provider_module(sodium_adapter.new, name_b, fn(provider_b, handle_b) {
-          let node_a = "node_a@localhost"
-          let node_b = "node_b@localhost"
+    test_helpers.with_provider_module(
+      sodium_adapter.new,
+      name_a,
+      fn(provider_a, handle_a) {
+        let assert Ok(_) =
+          test_helpers.with_provider_module(
+            sodium_adapter.new,
+            name_b,
+            fn(provider_b, handle_b) {
+              let node_a = "node_a@localhost"
+              let node_b = "node_b@localhost"
 
-          // Complete handshake
-          let assert Ok(types.Continue(state_a, Some(msg_a))) =
-            { provider_a.handshake_start }(handle_a, node_a, node_b, None)
-          let assert Ok(types.Continue(_state_b, Some(msg_b))) =
-            { provider_b.handshake_start }(
-              handle_b,
-              node_b,
-              node_a,
-              Some(msg_a),
-            )
-          let assert Ok(types.Established(_)) =
-            { provider_a.handshake_continue }(handle_a, state_a, msg_b)
+              // Complete handshake
+              let assert Ok(types.Continue(state_a, Some(msg_a))) =
+                { provider_a.handshake_start }(handle_a, node_a, node_b, None)
+              let assert Ok(types.Continue(_state_b, Some(msg_b))) =
+                { provider_b.handshake_start }(
+                  handle_b,
+                  node_b,
+                  node_a,
+                  Some(msg_a),
+                )
+              let assert Ok(types.Established(_)) =
+                { provider_a.handshake_continue }(handle_a, state_a, msg_b)
 
-          let assert Some(ctx_a) =
-            { provider_a.secure_context }(handle_a, node_b)
-          let assert Some(ctx_b) =
-            { provider_b.secure_context }(handle_b, node_a)
+              let assert Some(ctx_a) =
+                { provider_a.secure_context }(handle_a, node_b)
+              let assert Some(ctx_b) =
+                { provider_b.secure_context }(handle_b, node_a)
 
-          let messages = [
-            <<"Message 1">>,
-            <<"Message 2 is longer">>,
-            <<1, 2, 3, 4, 5>>,
-            <<"Unicode test">>,
-          ]
+              let messages = [
+                <<"Message 1">>,
+                <<"Message 2 is longer">>,
+                <<1, 2, 3, 4, 5>>,
+                <<"Unicode test">>,
+              ]
 
-          list.each(messages, fn(msg) {
-            let assert Ok(ciphertext) =
-              { provider_a.encrypt }(handle_a, ctx_a, msg)
-            let assert Ok(decrypted) =
-              { provider_b.decrypt }(handle_b, ctx_b, ciphertext)
-            should.equal(decrypted, msg)
-          })
+              list.each(messages, fn(msg) {
+                let assert Ok(ciphertext) =
+                  { provider_a.encrypt }(handle_a, ctx_a, msg)
+                let assert Ok(decrypted) =
+                  { provider_b.decrypt }(handle_b, ctx_b, ciphertext)
+                should.equal(decrypted, msg)
+              })
 
-          Nil
-        })
+              Nil
+            },
+          )
 
-      Nil
-    })
+        Nil
+      },
+    )
 }
 
 pub fn sodium_decrypt_with_wrong_key_fails_test() {
@@ -308,66 +328,93 @@ pub fn sodium_decrypt_with_wrong_key_fails_test() {
   let name_b = "test_sodium_wrong_key_b"
   let name_c = "test_sodium_wrong_key_c"
   let assert Ok(_) =
-    test_helpers.with_provider_module(sodium_adapter.new, name_a, fn(provider_a, handle_a) {
-      let assert Ok(_) =
-        test_helpers.with_provider_module(sodium_adapter.new, name_b, fn(provider_b, handle_b) {
-          let assert Ok(_) =
-            test_helpers.with_provider_module(
-              sodium_adapter.new,
-              name_c,
-              fn(provider_c, handle_c) {
-                let node_a = "node_a@localhost"
-                let node_b = "node_b@localhost"
-                let node_c = "node_c@localhost"
+    test_helpers.with_provider_module(
+      sodium_adapter.new,
+      name_a,
+      fn(provider_a, handle_a) {
+        let assert Ok(_) =
+          test_helpers.with_provider_module(
+            sodium_adapter.new,
+            name_b,
+            fn(provider_b, handle_b) {
+              let assert Ok(_) =
+                test_helpers.with_provider_module(
+                  sodium_adapter.new,
+                  name_c,
+                  fn(provider_c, handle_c) {
+                    let node_a = "node_a@localhost"
+                    let node_b = "node_b@localhost"
+                    let node_c = "node_c@localhost"
 
-                // A <-> B handshake
-                let assert Ok(types.Continue(state_a, Some(msg_a))) =
-                  { provider_a.handshake_start }(handle_a, node_a, node_b, None)
-                let assert Ok(types.Continue(_state_b, Some(msg_b))) =
-                  { provider_b.handshake_start }(
-                    handle_b,
-                    node_b,
-                    node_a,
-                    Some(msg_a),
-                  )
-                let assert Ok(types.Established(_)) =
-                  { provider_a.handshake_continue }(handle_a, state_a, msg_b)
+                    // A <-> B handshake
+                    let assert Ok(types.Continue(state_a, Some(msg_a))) =
+                      { provider_a.handshake_start }(
+                        handle_a,
+                        node_a,
+                        node_b,
+                        None,
+                      )
+                    let assert Ok(types.Continue(_state_b, Some(msg_b))) =
+                      { provider_b.handshake_start }(
+                        handle_b,
+                        node_b,
+                        node_a,
+                        Some(msg_a),
+                      )
+                    let assert Ok(types.Established(_)) =
+                      { provider_a.handshake_continue }(
+                        handle_a,
+                        state_a,
+                        msg_b,
+                      )
 
-                // A <-> C handshake (different keys)
-                let assert Ok(types.Continue(state_a2, Some(msg_a2))) =
-                  { provider_a.handshake_start }(handle_a, node_a, node_c, None)
-                let assert Ok(types.Continue(_state_c, Some(msg_c))) =
-                  { provider_c.handshake_start }(
-                    handle_c,
-                    node_c,
-                    node_a,
-                    Some(msg_a2),
-                  )
-                let assert Ok(types.Established(_)) =
-                  { provider_a.handshake_continue }(handle_a, state_a2, msg_c)
+                    // A <-> C handshake (different keys)
+                    let assert Ok(types.Continue(state_a2, Some(msg_a2))) =
+                      { provider_a.handshake_start }(
+                        handle_a,
+                        node_a,
+                        node_c,
+                        None,
+                      )
+                    let assert Ok(types.Continue(_state_c, Some(msg_c))) =
+                      { provider_c.handshake_start }(
+                        handle_c,
+                        node_c,
+                        node_a,
+                        Some(msg_a2),
+                      )
+                    let assert Ok(types.Established(_)) =
+                      { provider_a.handshake_continue }(
+                        handle_a,
+                        state_a2,
+                        msg_c,
+                      )
 
-                // A encrypts for B
-                let assert Some(ctx_a_b) =
-                  { provider_a.secure_context }(handle_a, node_b)
-                let plaintext = <<"Secret for B">>
-                let assert Ok(ciphertext) =
-                  { provider_a.encrypt }(handle_a, ctx_a_b, plaintext)
+                    // A encrypts for B
+                    let assert Some(ctx_a_b) =
+                      { provider_a.secure_context }(handle_a, node_b)
+                    let plaintext = <<"Secret for B">>
+                    let assert Ok(ciphertext) =
+                      { provider_a.encrypt }(handle_a, ctx_a_b, plaintext)
 
-                // C tries to decrypt with wrong key - should fail
-                let assert Some(ctx_c) =
-                  { provider_c.secure_context }(handle_c, node_a)
-                let result = { provider_c.decrypt }(handle_c, ctx_c, ciphertext)
-                should.be_error(result)
+                    // C tries to decrypt with wrong key - should fail
+                    let assert Some(ctx_c) =
+                      { provider_c.secure_context }(handle_c, node_a)
+                    let result =
+                      { provider_c.decrypt }(handle_c, ctx_c, ciphertext)
+                    should.be_error(result)
 
-                Nil
-              },
-            )
+                    Nil
+                  },
+                )
 
-          Nil
-        })
+              Nil
+            },
+          )
 
-      Nil
-    })
+        Nil
+      },
+    )
 }
 
 // =============================================================================
@@ -378,61 +425,73 @@ pub fn sodium_rekey_changes_key_id_test() {
   let name_a = "test_sodium_rekey_a"
   let name_b = "test_sodium_rekey_b"
   let assert Ok(_) =
-    test_helpers.with_provider_module(sodium_adapter.new, name_a, fn(provider_a, handle_a) {
-      let assert Ok(_) =
-        test_helpers.with_provider_module(sodium_adapter.new, name_b, fn(provider_b, handle_b) {
-          let node_a = "node_a@localhost"
-          let node_b = "node_b@localhost"
+    test_helpers.with_provider_module(
+      sodium_adapter.new,
+      name_a,
+      fn(provider_a, handle_a) {
+        let assert Ok(_) =
+          test_helpers.with_provider_module(
+            sodium_adapter.new,
+            name_b,
+            fn(provider_b, handle_b) {
+              let node_a = "node_a@localhost"
+              let node_b = "node_b@localhost"
 
-          // Complete handshake
-          let assert Ok(types.Continue(state_a, Some(msg_a))) =
-            { provider_a.handshake_start }(handle_a, node_a, node_b, None)
-          let assert Ok(types.Continue(_state_b, Some(msg_b))) =
-            { provider_b.handshake_start }(
-              handle_b,
-              node_b,
-              node_a,
-              Some(msg_a),
-            )
-          let assert Ok(types.Established(_)) =
-            { provider_a.handshake_continue }(handle_a, state_a, msg_b)
+              // Complete handshake
+              let assert Ok(types.Continue(state_a, Some(msg_a))) =
+                { provider_a.handshake_start }(handle_a, node_a, node_b, None)
+              let assert Ok(types.Continue(_state_b, Some(msg_b))) =
+                { provider_b.handshake_start }(
+                  handle_b,
+                  node_b,
+                  node_a,
+                  Some(msg_a),
+                )
+              let assert Ok(types.Established(_)) =
+                { provider_a.handshake_continue }(handle_a, state_a, msg_b)
 
-          let assert Some(ctx1) =
-            { provider_a.secure_context }(handle_a, node_b)
-          let key_id1 = types.context_key_id(ctx1)
+              let assert Some(ctx1) =
+                { provider_a.secure_context }(handle_a, node_b)
+              let key_id1 = types.context_key_id(ctx1)
 
-          // Rekey
-          let assert Ok(_) = { provider_a.rekey }(handle_a, node_b)
+              // Rekey
+              let assert Ok(_) = { provider_a.rekey }(handle_a, node_b)
 
-          let assert Some(ctx2) =
-            { provider_a.secure_context }(handle_a, node_b)
-          let key_id2 = types.context_key_id(ctx2)
+              let assert Some(ctx2) =
+                { provider_a.secure_context }(handle_a, node_b)
+              let key_id2 = types.context_key_id(ctx2)
 
-          should.not_equal(key_id1, key_id2)
+              should.not_equal(key_id1, key_id2)
 
-          Nil
-        })
+              Nil
+            },
+          )
 
-      Nil
-    })
+        Nil
+      },
+    )
 }
 
 pub fn sodium_rekey_without_context_fails_test() {
   let name = "test_sodium_rekey_fail"
   let assert Ok(_) =
-    test_helpers.with_provider_module(sodium_adapter.new, name, fn(provider, handle) {
-      // Rekey without establishing context first
-      let result = { provider.rekey }(handle, "unknown_node@localhost")
-      should.be_error(result)
+    test_helpers.with_provider_module(
+      sodium_adapter.new,
+      name,
+      fn(provider, handle) {
+        // Rekey without establishing context first
+        let result = { provider.rekey }(handle, "unknown_node@localhost")
+        should.be_error(result)
 
-      let assert Error(err) = result
-      case err {
-        types.NoSecureContext(_) -> Nil
-        _ -> panic as "Expected NoSecureContext error"
-      }
+        let assert Error(err) = result
+        case err {
+          types.NoSecureContext(_) -> Nil
+          _ -> panic as "Expected NoSecureContext error"
+        }
 
-      Nil
-    })
+        Nil
+      },
+    )
 }
 
 // =============================================================================
@@ -443,50 +502,58 @@ pub fn sodium_metrics_track_operations_test() {
   let name_a = "test_sodium_metrics_a"
   let name_b = "test_sodium_metrics_b"
   let assert Ok(_) =
-    test_helpers.with_provider_module(sodium_adapter.new, name_a, fn(provider_a, handle_a) {
-      let assert Ok(_) =
-        test_helpers.with_provider_module(sodium_adapter.new, name_b, fn(provider_b, handle_b) {
-          let node_a = "node_a@localhost"
-          let node_b = "node_b@localhost"
+    test_helpers.with_provider_module(
+      sodium_adapter.new,
+      name_a,
+      fn(provider_a, handle_a) {
+        let assert Ok(_) =
+          test_helpers.with_provider_module(
+            sodium_adapter.new,
+            name_b,
+            fn(provider_b, handle_b) {
+              let node_a = "node_a@localhost"
+              let node_b = "node_b@localhost"
 
-          // Initial metrics
-          let m1 = { provider_a.metrics }(handle_a)
-          should.equal(m1.handshakes_initiated, 0)
-          should.equal(m1.encrypt_count, 0)
-          should.equal(m1.decrypt_count, 0)
+              // Initial metrics
+              let m1 = { provider_a.metrics }(handle_a)
+              should.equal(m1.handshakes_initiated, 0)
+              should.equal(m1.encrypt_count, 0)
+              should.equal(m1.decrypt_count, 0)
 
-          // Complete handshake
-          let assert Ok(types.Continue(state_a, Some(msg_a))) =
-            { provider_a.handshake_start }(handle_a, node_a, node_b, None)
-          let assert Ok(types.Continue(_state_b, Some(msg_b))) =
-            { provider_b.handshake_start }(
-              handle_b,
-              node_b,
-              node_a,
-              Some(msg_a),
-            )
-          let assert Ok(types.Established(_)) =
-            { provider_a.handshake_continue }(handle_a, state_a, msg_b)
+              // Complete handshake
+              let assert Ok(types.Continue(state_a, Some(msg_a))) =
+                { provider_a.handshake_start }(handle_a, node_a, node_b, None)
+              let assert Ok(types.Continue(_state_b, Some(msg_b))) =
+                { provider_b.handshake_start }(
+                  handle_b,
+                  node_b,
+                  node_a,
+                  Some(msg_a),
+                )
+              let assert Ok(types.Established(_)) =
+                { provider_a.handshake_continue }(handle_a, state_a, msg_b)
 
-          let assert Some(ctx_a) =
-            { provider_a.secure_context }(handle_a, node_b)
+              let assert Some(ctx_a) =
+                { provider_a.secure_context }(handle_a, node_b)
 
-          // Encrypt/decrypt operations
-          let _ = { provider_a.encrypt }(handle_a, ctx_a, <<"test1">>)
-          let _ = { provider_a.encrypt }(handle_a, ctx_a, <<"test2">>)
+              // Encrypt/decrypt operations
+              let _ = { provider_a.encrypt }(handle_a, ctx_a, <<"test1">>)
+              let _ = { provider_a.encrypt }(handle_a, ctx_a, <<"test2">>)
 
-          // Check metrics
-          let m2 = { provider_a.metrics }(handle_a)
-          should.equal(m2.handshakes_initiated, 1)
-          should.equal(m2.handshakes_completed, 1)
-          should.equal(m2.encrypt_count, 2)
-          should.equal(m2.active_contexts, 1)
+              // Check metrics
+              let m2 = { provider_a.metrics }(handle_a)
+              should.equal(m2.handshakes_initiated, 1)
+              should.equal(m2.handshakes_completed, 1)
+              should.equal(m2.encrypt_count, 2)
+              should.equal(m2.active_contexts, 1)
 
-          Nil
-        })
+              Nil
+            },
+          )
 
-      Nil
-    })
+        Nil
+      },
+    )
 }
 
 // =============================================================================
@@ -496,12 +563,16 @@ pub fn sodium_metrics_track_operations_test() {
 pub fn sodium_health_returns_up_test() {
   let name = "test_sodium_health"
   let assert Ok(_) =
-    test_helpers.with_provider_module(sodium_adapter.new, name, fn(provider, handle) {
-      let health = { provider.health }(handle)
-      should.equal(health, types.Up)
+    test_helpers.with_provider_module(
+      sodium_adapter.new,
+      name,
+      fn(provider, handle) {
+        let health = { provider.health }(handle)
+        should.equal(health, types.Up)
 
-      Nil
-    })
+        Nil
+      },
+    )
 }
 
 // =============================================================================
@@ -511,71 +582,84 @@ pub fn sodium_health_returns_up_test() {
 pub fn concurrent_handshakes_test() {
   let n = 4
   let parent = process.new_subject()
-  let provider = sodium_adapter.new()
 
-  // Spawn N child processes performing a full handshake
-  // Spawn N worker processes using a list-based loop to avoid local recursion
+  // Spawn N child workflows performing a full handshake
   let ids = list.range(1, n)
   let _ =
     list.each(ids, fn(i) {
       let name_a = "con_a_" <> int.to_string(i)
       let name_b = "con_b_" <> int.to_string(i)
-      let options_a = adapter.default_options(name_a)
-      let options_b = adapter.default_options(name_b)
-      let assert Ok(handle_a) = { provider.init }(options_a)
-      let assert Ok(handle_b) = { provider.init }(options_b)
 
-      let _ =
-        process.spawn(fn() {
-          let node_a = name_a
-          let node_b = name_b
+      test_helpers.with_provider_module(
+        sodium_adapter.new,
+        name_a,
+        fn(provider_a, handle_a) {
+          test_helpers.with_provider_module(
+            sodium_adapter.new,
+            name_b,
+            fn(provider_b, handle_b) {
+              let _ =
+                process.spawn(fn() {
+                  let node_a = name_a
+                  let node_b = name_b
 
-          let send_and_shutdown = fn(msg, ha, hb) {
-            let _ = process.send(parent, msg)
-            let _ = { provider.shutdown }(ha)
-            let _ = { provider.shutdown }(hb)
-            Nil
-          }
-
-          case { provider.handshake_start }(handle_a, node_a, node_b, None) {
-            Ok(types.Continue(state_a, Some(msg_a))) -> {
-              case
-                { provider.handshake_start }(
-                  handle_b,
-                  node_b,
-                  node_a,
-                  Some(msg_a),
-                )
-              {
-                Ok(types.Continue(_state_b, Some(msg_b))) -> {
-                  case
-                    { provider.handshake_continue }(handle_a, state_a, msg_b)
-                  {
-                    Ok(types.Established(_ctx_a)) ->
-                      send_and_shutdown(<<"ok">>, handle_a, handle_b)
-                    Ok(types.Continue(_, _)) ->
-                      send_and_shutdown(<<"err">>, handle_a, handle_b)
-                    Ok(types.HandshakeError(_)) ->
-                      send_and_shutdown(<<"err">>, handle_a, handle_b)
-                    Error(_) -> send_and_shutdown(<<"err">>, handle_a, handle_b)
+                  let send_and_shutdown = fn(msg, _ha, _hb) {
+                    let _ = process.send(parent, msg)
+                    Nil
                   }
-                }
-                _ -> send_and_shutdown(<<"err">>, handle_a, handle_b)
-              }
-            }
-            _ -> send_and_shutdown(<<"err">>, handle_a, handle_b)
-          }
-        })
-    })
 
-  // Wait for n replies
-  let _ =
-    list.range(1, n)
-    |> list.each(fn(_) {
-      let assert Ok(msg) = process.receive(parent, 10_000)
-      should.equal(msg, <<"ok">>)
+                  case
+                    { provider_a.handshake_start }(
+                      handle_a,
+                      node_a,
+                      node_b,
+                      None,
+                    )
+                  {
+                    Ok(types.Continue(state_a, Some(msg_a))) -> {
+                      case
+                        { provider_b.handshake_start }(
+                          handle_b,
+                          node_b,
+                          node_a,
+                          Some(msg_a),
+                        )
+                      {
+                        Ok(types.Continue(_state_b, Some(msg_b))) -> {
+                          case
+                            { provider_a.handshake_continue }(
+                              handle_a,
+                              state_a,
+                              msg_b,
+                            )
+                          {
+                            Ok(types.Established(_ctx_a)) ->
+                              send_and_shutdown(<<"ok">>, handle_a, handle_b)
+                            Ok(types.Continue(_, _)) ->
+                              send_and_shutdown(<<"err">>, handle_a, handle_b)
+                            Ok(types.HandshakeError(_)) ->
+                              send_and_shutdown(<<"err">>, handle_a, handle_b)
+                            Error(_) ->
+                              send_and_shutdown(<<"err">>, handle_a, handle_b)
+                          }
+                        }
+                        _ -> send_and_shutdown(<<"err">>, handle_a, handle_b)
+                      }
+                    }
+                    _ -> send_and_shutdown(<<"err">>, handle_a, handle_b)
+                  }
+                })
+
+              // Wait for this worker to report back before allowing helper to return and cleanup
+              let assert Ok(msg) = process.receive(parent, 10_000)
+              should.equal(msg, <<"ok">>)
+
+              Nil
+            },
+          )
+        },
+      )
     })
-  // Note: providers are not explicitly shutdown here for brevity.
 }
 // =============================================================================
 // Import for string.inspect

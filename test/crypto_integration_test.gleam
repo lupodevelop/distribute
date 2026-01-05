@@ -4,7 +4,6 @@
 //// - Provider initialization and shutdown
 //// - Handshake flow
 //// - Encryption/decryption (noop adapter returns identity)
-//// - Rekey operations
 //// - Health and metrics
 //// - Concurrency and timeout handling
 ////
@@ -12,7 +11,7 @@
 import distribute/crypto/adapter
 import distribute/crypto/noop_adapter
 import distribute/crypto/types
-import gleam/list
+
 import gleam/option.{None, Some}
 import gleeunit/should
 import test_helpers
@@ -122,7 +121,8 @@ pub fn crypto_secure_context_lookup_test() {
         should.equal(no_ctx, None)
 
         // After handshake - context exists
-        let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
+        let assert Ok(_) =
+          { provider.handshake_start }(handle, local, remote, None)
         let ctx_opt = { provider.secure_context }(handle, remote)
         should.be_some(ctx_opt)
 
@@ -148,7 +148,8 @@ pub fn crypto_noop_encrypt_decrypt_identity_test() {
         let remote = "node_d@localhost"
 
         // Establish context
-        let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
+        let assert Ok(_) =
+          { provider.handshake_start }(handle, local, remote, None)
         let assert Some(ctx) = { provider.secure_context }(handle, remote)
 
         // Encrypt
@@ -184,7 +185,8 @@ pub fn crypto_encrypt_multiple_messages_test() {
         let local = "node_a@localhost"
         let remote = "node_e@localhost"
 
-        let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
+        let assert Ok(_) =
+          { provider.handshake_start }(handle, local, remote, None)
         let assert Some(ctx) = { provider.secure_context }(handle, remote)
 
         // Multiple encryptions
@@ -224,7 +226,8 @@ pub fn crypto_rekey_updates_key_id_test() {
         let local = "node_a@localhost"
         let remote = "node_f@localhost"
 
-        let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
+        let assert Ok(_) =
+          { provider.handshake_start }(handle, local, remote, None)
         let assert Some(ctx1) = { provider.secure_context }(handle, remote)
         let key_id1 = types.context_key_id(ctx1)
 
@@ -246,7 +249,7 @@ pub fn crypto_rekey_updates_key_id_test() {
 
 pub fn crypto_rekey_without_context_fails_test() {
   let name = "test_crypto_rekey_fail"
-  let options = adapter.development_options(name)
+  let _options = adapter.development_options(name)
   let assert Ok(_) =
     test_helpers.with_provider_module_with_options_checked(
       noop_adapter.new,
@@ -275,7 +278,7 @@ pub fn crypto_rekey_without_context_fails_test() {
 
 pub fn crypto_metrics_track_operations_test() {
   let name = "test_crypto_metrics"
-  let options = adapter.development_options(name)
+  let _options = adapter.development_options(name)
   let assert Ok(_) =
     test_helpers.with_provider_module_with_options_checked(
       noop_adapter.new,
@@ -292,7 +295,8 @@ pub fn crypto_metrics_track_operations_test() {
         // Perform operations
         let local = "node_a@localhost"
         let remote = "node_g@localhost"
-        let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
+        let assert Ok(_) =
+          { provider.handshake_start }(handle, local, remote, None)
         let assert Some(ctx) = { provider.secure_context }(handle, remote)
 
         let _ = { provider.encrypt }(handle, ctx, <<"test1">>)
@@ -318,7 +322,7 @@ pub fn crypto_metrics_track_operations_test() {
 
 pub fn crypto_health_returns_degraded_in_dev_mode_test() {
   let name = "test_crypto_health"
-  let options = adapter.development_options(name)
+  let _options = adapter.development_options(name)
   let assert Ok(_) =
     test_helpers.with_provider_module_with_options_checked(
       noop_adapter.new,
@@ -363,9 +367,12 @@ pub fn crypto_concurrent_handshakes_test() {
         let remote2 = "node_i@localhost"
         let remote3 = "node_j@localhost"
 
-        let assert Ok(_) = { provider.handshake_start }(handle, local, remote1, None)
-        let assert Ok(_) = { provider.handshake_start }(handle, local, remote2, None)
-        let assert Ok(_) = { provider.handshake_start }(handle, local, remote3, None)
+        let assert Ok(_) =
+          { provider.handshake_start }(handle, local, remote1, None)
+        let assert Ok(_) =
+          { provider.handshake_start }(handle, local, remote2, None)
+        let assert Ok(_) =
+          { provider.handshake_start }(handle, local, remote3, None)
 
         // All contexts should exist
         should.be_some({ provider.secure_context }(handle, remote1))
@@ -393,13 +400,9 @@ pub fn crypto_concurrent_encrypt_decrypt_test() {
       name,
       fn(provider, handle) {
         let local = "node_a@localhost"
-        let remote = "node_k@localhost"
-
-        let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
-        let assert Some(ctx) = { provider.secure_context }(handle, remote)
 
         // Multiple encrypt/decrypt operations
-        let messages = [
+        let _messages = [
           <<"msg1">>,
           <<"msg2">>,
           <<"msg3">>,
@@ -412,9 +415,12 @@ pub fn crypto_concurrent_encrypt_decrypt_test() {
         let remote2 = "node_i@localhost"
         let remote3 = "node_j@localhost"
 
-        let assert Ok(_) = { provider.handshake_start }(handle, local, remote1, None)
-        let assert Ok(_) = { provider.handshake_start }(handle, local, remote2, None)
-        let assert Ok(_) = { provider.handshake_start }(handle, local, remote3, None)
+        let assert Ok(_) =
+          { provider.handshake_start }(handle, local, remote1, None)
+        let assert Ok(_) =
+          { provider.handshake_start }(handle, local, remote2, None)
+        let assert Ok(_) =
+          { provider.handshake_start }(handle, local, remote3, None)
 
         // All contexts should exist
         should.be_some({ provider.secure_context }(handle, remote1))
@@ -427,11 +433,14 @@ pub fn crypto_concurrent_encrypt_decrypt_test() {
         should.equal(m.handshakes_completed, 3)
         should.equal(m.active_contexts, 3)
 
+        // After concurrent handshakes, check metrics
+        // (we perform an additional encrypt/rekey flow afterwards)
         // Encrypt before rekey
         let local = "node_a@localhost"
         let remote = "node_l@localhost"
 
-        let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
+        let assert Ok(_) =
+          { provider.handshake_start }(handle, local, remote, None)
         let assert Some(ctx1) = { provider.secure_context }(handle, remote)
 
         let msg = <<"before rekey">>
@@ -477,13 +486,14 @@ pub fn crypto_operations_after_shutdown_fail_test() {
         let local = "node_a@localhost"
         let remote = "node_m@localhost"
 
-        let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
+        let assert Ok(_) =
+          { provider.handshake_start }(handle, local, remote, None)
         let assert Some(_ctx) = { provider.secure_context }(handle, remote)
 
         // After shutdown, operations should timeout or fail gracefully
         // Health check should return Down
         let health = { provider.health }(handle)
-        case health {
+        let _ = case health {
           types.Down(_) -> Nil
           _ -> {
             // May also timeout, which is acceptable

@@ -1,7 +1,9 @@
 //// Test helpers used by integration tests
 
 import distribute/crypto/adapter.{type CryptoAdapter}
-import distribute/crypto/types.{type CryptoError, type ProviderHandle, type ProviderOptions}
+import distribute/crypto/types.{
+  type CryptoError, type ProviderHandle, type ProviderOptions,
+}
 import gleeunit/should
 
 // with_provider: given a `CryptoAdapter` instance and a `name`, initialize
