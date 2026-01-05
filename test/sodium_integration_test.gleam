@@ -13,8 +13,11 @@ import distribute/crypto/adapter
 import distribute/crypto/sodium_adapter
 import distribute/crypto/types
 import gleam/bit_array
+import gleam/erlang/process
+import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
+import gleam/string
 import gleeunit/should
 
 // =============================================================================
@@ -460,7 +463,57 @@ pub fn sodium_health_returns_up_test() {
 }
 
 // =============================================================================
-// Import for string.inspect
+// Concurrent handshake tests
 // =============================================================================
 
-import gleam/string
+pub fn concurrent_handshakes_test() {
+  let n = 4
+  let parent = process.new_subject()
+  let provider = sodium_adapter.new()
+
+  // Spawn N child processes performing a full handshake
+  // Spawn N worker processes using a list-based loop to avoid local recursion
+  let ids = list.range(1, n)
+  let _ = list.each(ids, fn(i) {
+    let name_a = "con_a_" <> int.to_string(i)
+    let name_b = "con_b_" <> int.to_string(i)
+    let options_a = adapter.default_options(name_a)
+    let options_b = adapter.default_options(name_b)
+    let assert Ok(handle_a) = { provider.init }(options_a)
+    let assert Ok(handle_b) = { provider.init }(options_b)
+
+    let _ = process.spawn(fn() {
+      let node_a = name_a
+      let node_b = name_b
+
+      case { provider.handshake_start }(handle_a, node_a, node_b, None) {
+        Ok(types.Continue(state_a, Some(msg_a))) -> {
+          case { provider.handshake_start }(handle_b, node_b, node_a, Some(msg_a)) {
+            Ok(types.Continue(_state_b, Some(msg_b))) -> {
+              case { provider.handshake_continue }(handle_a, state_a, msg_b) {
+                Ok(types.Established(_ctx_a)) -> process.send(parent, <<"ok">>)
+                Ok(types.Continue(_, _)) -> process.send(parent, <<"err">>)
+                Ok(types.HandshakeError(_)) -> process.send(parent, <<"err">>)
+                Error(_) -> process.send(parent, <<"err">>)
+              }
+            }
+            _ -> process.send(parent, <<"err">>)
+          }
+        }
+        _ -> process.send(parent, <<"err">>)
+      }
+    })
+  })
+
+  // Wait for n replies
+  let _ = list.range(1, n) |> list.each(fn(_) {
+    let assert Ok(msg) = process.receive(parent, 10_000)
+    should.equal(msg, <<"ok">>)
+  })
+
+  // Note: providers are not explicitly shutdown here for brevity.
+}
+
+// =============================================================================
+// Import for string.inspect
+// =============================================================================

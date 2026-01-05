@@ -56,12 +56,12 @@ pub fn hkdf_rfc5869_vector1_test() {
 
 pub fn scalarmult_shared_secret_equality_test() {
   case ffi_gen_keypair() {
-    Ok(#(pub_a, priv_a)) -> {
+    Ok(#(pub_key_a, priv_key_a)) -> {
       case ffi_gen_keypair() {
-        Ok(#(pub_b, priv_b)) -> {
-          case ffi_scalarmult(pub_b, priv_a) {
+        Ok(#(pub_key_b, priv_key_b)) -> {
+          case ffi_scalarmult(pub_key_b, priv_key_a) {
             Ok(shared1) -> {
-              case ffi_scalarmult(pub_a, priv_b) {
+              case ffi_scalarmult(pub_key_a, priv_key_b) {
                 Ok(shared2) -> should.equal(shared1, shared2)
                 Error(_) -> panic as "scalarmult failed (shared2)"
               }
@@ -125,9 +125,9 @@ pub fn aead_encrypt_decrypt_and_failure_modes_test() {
 
 pub fn gen_keypair_sizes_test() {
   case ffi_gen_keypair() {
-    Ok(#(pub, priv)) -> {
-      should.equal(bit_array.byte_size(pub), 32)
-      should.equal(bit_array.byte_size(priv), 32)
+    Ok(#(pub_key, priv_key)) -> {
+      should.equal(bit_array.byte_size(pub_key), 32)
+      should.equal(bit_array.byte_size(priv_key), 32)
     }
     Error(_) -> panic as "gen_keypair failed"
   }
@@ -154,3 +154,90 @@ pub fn aead_decrypt_invalid_key_size_test() {
     Error(_) -> Nil
   }
 }
+
+// -----------------------------------------------------------------------------
+// Additional HKDF and AEAD edge-case tests
+
+pub fn hkdf_length_and_info_variation_test() {
+  let ikm = <<1,2,3,4,5,6>>
+  let salt = <<>>
+
+  case ffi_hkdf(salt, ikm, <<"info1">>, 16) {
+    Ok(a) -> {
+      case ffi_hkdf(salt, ikm, <<"info2">>, 32) {
+        Ok(b) -> {
+          should.equal(bit_array.byte_size(a), 16)
+          should.equal(bit_array.byte_size(b), 32)
+          should.not_equal(a, b)
+        }
+        Error(_) -> panic as "hkdf failed for len 32"
+      }
+    }
+    Error(_) -> panic as "hkdf failed for len 16"
+  }
+}
+
+pub fn aead_zero_length_plaintext_test() {
+  let ikm = <<"zero-ikm">>
+  let salt = <<>>
+  let info = <<"zero">>
+
+  case ffi_hkdf(salt, ikm, info, 32) {
+    Ok(aead_key) -> {
+      let nonce = ffi_generate_nonce()
+      let aad = <<>>
+      let plaintext = <<>>
+
+      case ffi_aead_encrypt(aead_key, nonce, aad, plaintext) {
+        Ok(ciphertext) -> {
+          case ffi_aead_decrypt(aead_key, nonce, aad, ciphertext) {
+            Ok(pt) -> should.equal(pt, plaintext)
+            Error(_) -> panic as "decrypt failed for zero-length plaintext"
+          }
+        }
+        Error(_) -> panic as "aead_encrypt failed for zero-length plaintext"
+      }
+    }
+    Error(_) -> panic as "hkdf failed"
+  }
+}
+
+pub fn aead_tamper_and_short_ciphertext_test() {
+  let ikm = <<"tamper-ikm">>
+  let salt = <<>>
+  let info = <<"tamper">>
+
+  case ffi_hkdf(salt, ikm, info, 32) {
+    Ok(aead_key) -> {
+      let nonce = ffi_generate_nonce()
+      let aad = <<>>
+      let plaintext = <<"sensitive">>
+
+      case ffi_aead_encrypt(aead_key, nonce, aad, plaintext) {
+        Ok(ciphertext) -> {
+          // Tamper: remove last byte (short ciphertext)
+          let len = bit_array.byte_size(ciphertext)
+          case bit_array.slice(ciphertext, 0, len - 1) {
+            Ok(short_ct) -> {
+              case ffi_aead_decrypt(aead_key, nonce, aad, short_ct) {
+                Ok(_) -> panic as "decrypt succeeded on short ciphertext"
+                Error(_) -> Nil
+              }
+            }
+            Error(_) -> panic as "failed to slice ciphertext"
+          }
+
+          // Tamper: append extra byte (invalid tag)
+          let tampered = bit_array.concat([ciphertext, <<1>>])
+          case ffi_aead_decrypt(aead_key, nonce, aad, tampered) {
+            Ok(_) -> panic as "decrypt succeeded on tampered ciphertext"
+            Error(_) -> Nil
+          }
+        }
+        Error(_) -> panic as "aead_encrypt failed"
+      }
+    }
+    Error(_) -> panic as "hkdf failed"
+  }
+}
+

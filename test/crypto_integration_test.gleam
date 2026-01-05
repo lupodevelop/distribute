@@ -451,7 +451,7 @@ pub fn crypto_operations_after_shutdown_fail_test() {
   let remote = "node_m@localhost"
 
   let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
-  let assert Some(ctx) = { provider.secure_context }(handle, remote)
+  let assert Some(_ctx) = { provider.secure_context }(handle, remote)
 
   // Shutdown
   let assert Ok(_) = { provider.shutdown }(handle)
