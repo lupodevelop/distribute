@@ -59,3 +59,59 @@ pub fn with_provider_module_with_options(
     Error(err) -> Error(err)
   }
 }
+
+// with_provider_module_checked: like with_provider_module but also verify the
+// adapter-level `get_handle` returns Error for `name` after shutdown.
+pub fn with_provider_module_checked(
+  provider_ctor: fn() -> CryptoAdapter,
+  get_handle: fn(String) -> Result(ProviderHandle, e),
+  name: String,
+  f: fn(CryptoAdapter, ProviderHandle) -> a,
+) -> Result(a, CryptoError) {
+  let options = adapter.default_options(name)
+  let provider = provider_ctor()
+
+  let result = { provider.init }(options)
+  case result {
+    Ok(handle) -> {
+      let res = f(provider, handle)
+
+      let shutdown_result = { provider.shutdown }(handle)
+      should.be_ok(shutdown_result)
+
+      // Sanity: adapter-level get_handle should not return Ok for this name
+      let handle_check = get_handle(name)
+      should.be_error(handle_check)
+
+      Ok(res)
+    }
+    Error(err) -> Error(err)
+  }
+}
+
+// with_provider_module_with_options_checked: same as above with explicit options
+pub fn with_provider_module_with_options_checked(
+  provider_ctor: fn() -> CryptoAdapter,
+  get_handle: fn(String) -> Result(ProviderHandle, e),
+  options: ProviderOptions,
+  name: String,
+  f: fn(CryptoAdapter, ProviderHandle) -> a,
+) -> Result(a, CryptoError) {
+  let provider = provider_ctor()
+
+  let result = { provider.init }(options)
+  case result {
+    Ok(handle) -> {
+      let res = f(provider, handle)
+
+      let shutdown_result = { provider.shutdown }(handle)
+      should.be_ok(shutdown_result)
+
+      let handle_check = get_handle(name)
+      should.be_error(handle_check)
+
+      Ok(res)
+    }
+    Error(err) -> Error(err)
+  }
+}

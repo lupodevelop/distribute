@@ -28,7 +28,11 @@ import test_helpers
 pub fn sodium_init_and_shutdown_test() {
   let name = "test_sodium_lifecycle"
   let assert Ok(_) =
-    test_helpers.with_provider_module(sodium_adapter.new, name, fn(provider, handle) {
+    test_helpers.with_provider_module_checked(
+      sodium_adapter.new,
+      sodium_adapter.get_handle,
+      name,
+      fn(provider, handle) {
       // Check health
       let health = { provider.health }(handle)
       case health {
@@ -44,7 +48,11 @@ pub fn sodium_init_and_shutdown_test() {
 pub fn sodium_get_handle_after_init_test() {
   let name = "test_sodium_handle"
   let assert Ok(_) =
-    test_helpers.with_provider_module(sodium_adapter.new, name, fn(_provider, _handle) {
+    test_helpers.with_provider_module_checked(
+      sodium_adapter.new,
+      sodium_adapter.get_handle,
+      name,
+      fn(_provider, _handle) {
       // Get handle by name
       let handle_result = sodium_adapter.get_handle(name)
       should.be_ok(handle_result)
@@ -60,7 +68,11 @@ pub fn sodium_get_handle_after_init_test() {
 pub fn sodium_handshake_initiator_creates_pending_test() {
   let name = "test_sodium_handshake_init"
   let assert Ok(_) =
-    test_helpers.with_provider_module(sodium_adapter.new, name, fn(provider, handle) {
+    test_helpers.with_provider_module_checked(
+      sodium_adapter.new,
+      sodium_adapter.get_handle,
+      name,
+      fn(provider, handle) {
       let local = "node_a@localhost"
       let remote = "node_b@localhost"
 
@@ -89,7 +101,11 @@ pub fn sodium_handshake_initiator_creates_pending_test() {
 pub fn sodium_handshake_responder_derives_key_test() {
   let name = "test_sodium_handshake_resp"
   let assert Ok(_) =
-    test_helpers.with_provider_module(sodium_adapter.new, name, fn(provider, handle) {
+    test_helpers.with_provider_module_checked(
+      sodium_adapter.new,
+      sodium_adapter.get_handle,
+      name,
+      fn(provider, handle) {
       let local = "node_b@localhost"
       let remote = "node_a@localhost"
 
@@ -137,7 +153,11 @@ pub fn sodium_full_handshake_between_two_providers_test() {
   let assert Ok(_) =
     test_helpers.with_provider_module(sodium_adapter.new, name_a, fn(provider_a, handle_a) {
       let assert Ok(_) =
-        test_helpers.with_provider_module(sodium_adapter.new, name_b, fn(provider_b, handle_b) {
+        test_helpers.with_provider_module_checked(
+          sodium_adapter.new,
+          sodium_adapter.get_handle,
+          name_b,
+          fn(provider_b, handle_b) {
           let node_a = "node_a@localhost"
           let node_b = "node_b@localhost"
 
@@ -179,9 +199,17 @@ pub fn sodium_encrypt_decrypt_roundtrip_test() {
   let name_a = "test_sodium_enc_a"
   let name_b = "test_sodium_enc_b"
   let assert Ok(_) =
-    test_helpers.with_provider_module(sodium_adapter.new, name_a, fn(provider_a, handle_a) {
+    test_helpers.with_provider_module_checked(
+      sodium_adapter.new,
+      sodium_adapter.get_handle,
+      name_a,
+      fn(provider_a, handle_a) {
       let assert Ok(_) =
-        test_helpers.with_provider_module(sodium_adapter.new, name_b, fn(provider_b, handle_b) {
+        test_helpers.with_provider_module_checked(
+          sodium_adapter.new,
+          sodium_adapter.get_handle,
+          name_b,
+          fn(provider_b, handle_b) {
           let node_a = "node_a@localhost"
           let node_b = "node_b@localhost"
 
