@@ -39,6 +39,16 @@ pub fn from_pid(
   GlobalSubject(subject, encoder, decoder)
 }
 
+/// Create a global subject from an existing Subject(BitArray) with required codec.
+/// Useful when you already have a Subject (e.g., from `start_global_receiver`).
+pub fn from_subject(
+  subject: process.Subject(BitArray),
+  encoder: codec.Encoder(msg),
+  decoder: codec.Decoder(msg),
+) -> GlobalSubject(msg) {
+  GlobalSubject(subject, encoder, decoder)
+}
+
 /// Get the underlying Subject(BitArray) for low-level operations.
 /// Prefer using `send` and `receive` methods for type-safe messaging.
 pub fn subject(global: GlobalSubject(msg)) -> process.Subject(BitArray) {
