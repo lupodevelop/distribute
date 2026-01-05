@@ -3,27 +3,45 @@
 //// These tests exercise edge cases and fixed vectors (RFC 5869 HKDF vector)
 //// and validate basic properties for X25519 and AEAD operations.
 
-import gleeunit/should
 import gleam/bit_array
+import gleeunit/should
 
 // External bindings (mirror functions in `crypto_sodium_ffi.erl`)
 @external(erlang, "crypto_sodium_ffi", "gen_keypair")
 fn ffi_gen_keypair() -> Result(#(BitArray, BitArray), Nil)
 
 @external(erlang, "crypto_sodium_ffi", "scalarmult")
-fn ffi_scalarmult(peer_pub: BitArray, our_priv: BitArray) -> Result(BitArray, Nil)
+fn ffi_scalarmult(
+  peer_pub: BitArray,
+  our_priv: BitArray,
+) -> Result(BitArray, Nil)
 
 @external(erlang, "crypto_sodium_ffi", "hkdf")
-fn ffi_hkdf(salt: BitArray, ikm: BitArray, info: BitArray, len: Int) -> Result(BitArray, Nil)
+fn ffi_hkdf(
+  salt: BitArray,
+  ikm: BitArray,
+  info: BitArray,
+  len: Int,
+) -> Result(BitArray, Nil)
 
 @external(erlang, "crypto_sodium_ffi", "generate_nonce")
 fn ffi_generate_nonce() -> BitArray
 
 @external(erlang, "crypto_sodium_ffi", "aead_encrypt")
-fn ffi_aead_encrypt(key: BitArray, nonce: BitArray, aad: BitArray, plaintext: BitArray) -> Result(BitArray, Nil)
+fn ffi_aead_encrypt(
+  key: BitArray,
+  nonce: BitArray,
+  aad: BitArray,
+  plaintext: BitArray,
+) -> Result(BitArray, Nil)
 
 @external(erlang, "crypto_sodium_ffi", "aead_decrypt")
-fn ffi_aead_decrypt(key: BitArray, nonce: BitArray, aad: BitArray, ciphertext: BitArray) -> Result(BitArray, Nil)
+fn ffi_aead_decrypt(
+  key: BitArray,
+  nonce: BitArray,
+  aad: BitArray,
+  ciphertext: BitArray,
+) -> Result(BitArray, Nil)
 
 // -----------------------------------------------------------------------------
 // HKDF fixed vector test (RFC 5869 - Test case 1)
@@ -36,13 +54,75 @@ fn ffi_aead_decrypt(key: BitArray, nonce: BitArray, aad: BitArray, ciphertext: B
 
 pub fn hkdf_rfc5869_vector1_test() {
   // Build inputs
-  let ikm = <<11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11>>
-  let salt = <<0,1,2,3,4,5,6,7,8,9,10,11,12>>
-  let info = <<0xf0,0xf1,0xf2,0xf3,0xf4,0xf5,0xf6,0xf7,0xf8,0xf9>>
+  let ikm = <<
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+  >>
+  let salt = <<0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12>>
+  let info = <<0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9>>
   let expected = <<
-    0x3c,0xb2,0x5f,0x25,0xfa,0xac,0xd5,0x7a,0x90,0x43,0x4f,0x64,0xd0,0x36,0x2f,0x2a,
-    0x2d,0x2d,0x0a,0x90,0xcf,0x1a,0x5a,0x4c,0x5d,0xb0,0x2d,0x56,0xec,0xc4,0xc5,0xbf,
-    0x34,0x00,0x72,0x08,0xd5,0xb8,0x87,0x18,0x58,0x65
+    0x3c,
+    0xb2,
+    0x5f,
+    0x25,
+    0xfa,
+    0xac,
+    0xd5,
+    0x7a,
+    0x90,
+    0x43,
+    0x4f,
+    0x64,
+    0xd0,
+    0x36,
+    0x2f,
+    0x2a,
+    0x2d,
+    0x2d,
+    0x0a,
+    0x90,
+    0xcf,
+    0x1a,
+    0x5a,
+    0x4c,
+    0x5d,
+    0xb0,
+    0x2d,
+    0x56,
+    0xec,
+    0xc4,
+    0xc5,
+    0xbf,
+    0x34,
+    0x00,
+    0x72,
+    0x08,
+    0xd5,
+    0xb8,
+    0x87,
+    0x18,
+    0x58,
+    0x65,
   >>
 
   case ffi_hkdf(salt, ikm, info, 42) {
@@ -111,7 +191,6 @@ pub fn aead_encrypt_decrypt_and_failure_modes_test() {
             }
             Error(_) -> panic as "hkdf failed for wrong key"
           }
-
         }
         Error(_) -> panic as "aead_encrypt failed"
       }
@@ -143,11 +222,11 @@ pub fn nonce_size_test() {
 
 pub fn aead_decrypt_invalid_key_size_test() {
   // Prepare invalid key
-  let invalid_key = <<1,2,3,4>>
+  let invalid_key = <<1, 2, 3, 4>>
   let nonce = ffi_generate_nonce()
   let aad = <<>>
   // ciphertext arbitrary (too short will also be error)
-  let ciphertext = <<1,2,3,4,5,6>>
+  let ciphertext = <<1, 2, 3, 4, 5, 6>>
 
   case ffi_aead_decrypt(invalid_key, nonce, aad, ciphertext) {
     Ok(_) -> panic as "decrypt unexpectedly succeeded with invalid key size"
@@ -159,7 +238,7 @@ pub fn aead_decrypt_invalid_key_size_test() {
 // Additional HKDF and AEAD edge-case tests
 
 pub fn hkdf_length_and_info_variation_test() {
-  let ikm = <<1,2,3,4,5,6>>
+  let ikm = <<1, 2, 3, 4, 5, 6>>
   let salt = <<>>
 
   case ffi_hkdf(salt, ikm, <<"info1">>, 16) {
@@ -240,4 +319,3 @@ pub fn aead_tamper_and_short_ciphertext_test() {
     Error(_) -> panic as "hkdf failed"
   }
 }
-

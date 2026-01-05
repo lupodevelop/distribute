@@ -15,6 +15,7 @@ import distribute/crypto/types
 import gleam/list
 import gleam/option.{None, Some}
 import gleeunit/should
+import test_helpers
 
 // =============================================================================
 // Provider Lifecycle Tests
@@ -22,43 +23,45 @@ import gleeunit/should
 
 pub fn crypto_init_and_shutdown_test() {
   let name = "test_crypto_lifecycle"
-  let options = adapter.development_options(name)
-  let provider = noop_adapter.new()
+  let assert Ok(_) =
+    test_helpers.with_provider_module_with_options(
+      noop_adapter.new,
+      adapter.development_options(name),
+      fn(provider, handle) {
+        // Check health
+        let health = { provider.health }(handle)
+        case health {
+          types.Up -> Nil
+          types.Degraded(_) -> Nil
+          types.Down(reason) -> panic as { "Unexpected down: " <> reason }
+        }
 
-  // Initialize
-  let result = { provider.init }(options)
-  should.be_ok(result)
-
-  let assert Ok(handle) = result
-
-  // Check health
-  let health = { provider.health }(handle)
-  case health {
-    types.Up -> Nil
-    types.Degraded(_) -> Nil
-    types.Down(reason) -> panic as { "Unexpected down: " <> reason }
-  }
-
-  // Shutdown
-  let shutdown_result = { provider.shutdown }(handle)
-  should.be_ok(shutdown_result)
+        Nil
+      },
+    )
 }
 
 pub fn crypto_get_handle_after_init_test() {
   let name = "test_crypto_handle"
-  let options = adapter.development_options(name)
-  let provider = noop_adapter.new()
+  let assert Ok(_) =
+    test_helpers.with_provider_module_with_options(
+      noop_adapter.new,
+      adapter.development_options(name),
+      fn(provider, handle) {
+        // Verify provider health and get handle by name
+        let health = { provider.health }(handle)
+        case health {
+          types.Up -> Nil
+          types.Degraded(_) -> Nil
+          types.Down(reason) -> panic as { "Unexpected down: " <> reason }
+        }
 
-  // Initialize
-  let assert Ok(_handle) = { provider.init }(options)
+        let handle_result = noop_adapter.get_handle(name)
+        should.be_ok(handle_result)
 
-  // Get handle by name
-  let handle_result = noop_adapter.get_handle(name)
-  should.be_ok(handle_result)
-
-  // Cleanup
-  let assert Ok(handle) = handle_result
-  let _ = { provider.shutdown }(handle)
+        Nil
+      },
+    )
 }
 
 // =============================================================================
@@ -67,54 +70,57 @@ pub fn crypto_get_handle_after_init_test() {
 
 pub fn crypto_handshake_establishes_context_test() {
   let name = "test_crypto_handshake"
-  let options = adapter.development_options(name)
-  let provider = noop_adapter.new()
+  let assert Ok(_) =
+    test_helpers.with_provider_module_with_options(
+      noop_adapter.new,
+      adapter.development_options(name),
+      fn(provider, handle) {
+        let local = "node_a@localhost"
+        let remote = "node_b@localhost"
 
-  let assert Ok(handle) = { provider.init }(options)
+        // Start handshake - noop adapter completes immediately
+        let result = { provider.handshake_start }(handle, local, remote, None)
+        should.be_ok(result)
 
-  let local = "node_a@localhost"
-  let remote = "node_b@localhost"
+        let assert Ok(handshake_result) = result
+        case handshake_result {
+          types.Established(ctx) -> {
+            // Verify context properties
+            types.context_node_id(ctx) |> should.equal(remote)
+            types.context_stage(ctx) |> should.equal(types.SecureEstablished)
+          }
+          types.Continue(_, _) -> panic as "Expected Established, got Continue"
+          types.HandshakeError(_) ->
+            panic as "Expected Established, got HandshakeError"
+        }
 
-  // Start handshake - noop adapter completes immediately
-  let result = { provider.handshake_start }(handle, local, remote, None)
-  should.be_ok(result)
-
-  let assert Ok(handshake_result) = result
-  case handshake_result {
-    types.Established(ctx) -> {
-      // Verify context properties
-      types.context_node_id(ctx) |> should.equal(remote)
-      types.context_stage(ctx) |> should.equal(types.SecureEstablished)
-    }
-    types.Continue(_, _) -> panic as "Expected Established, got Continue"
-    types.HandshakeError(_) -> panic as "Expected Established, got HandshakeError"
-  }
-
-  // Cleanup
-  let _ = { provider.shutdown }(handle)
+        Nil
+      },
+    )
 }
 
 pub fn crypto_secure_context_lookup_test() {
   let name = "test_crypto_context"
-  let options = adapter.development_options(name)
-  let provider = noop_adapter.new()
+  let assert Ok(_) =
+    test_helpers.with_provider_module_with_options(
+      noop_adapter.new,
+      adapter.development_options(name),
+      fn(provider, handle) {
+        let local = "node_a@localhost"
+        let remote = "node_c@localhost"
 
-  let assert Ok(handle) = { provider.init }(options)
+        // Before handshake - no context
+        let no_ctx = { provider.secure_context }(handle, remote)
+        should.equal(no_ctx, None)
 
-  let local = "node_a@localhost"
-  let remote = "node_c@localhost"
+        // After handshake - context exists
+        let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
+        let ctx_opt = { provider.secure_context }(handle, remote)
+        should.be_some(ctx_opt)
 
-  // Before handshake - no context
-  let no_ctx = { provider.secure_context }(handle, remote)
-  should.equal(no_ctx, None)
-
-  // After handshake - context exists
-  let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
-  let ctx_opt = { provider.secure_context }(handle, remote)
-  should.be_some(ctx_opt)
-
-  // Cleanup
-  let _ = { provider.shutdown }(handle)
+        Nil
+      },
+    )
 }
 
 // =============================================================================
@@ -123,71 +129,73 @@ pub fn crypto_secure_context_lookup_test() {
 
 pub fn crypto_noop_encrypt_decrypt_identity_test() {
   let name = "test_crypto_encrypt"
-  let options = adapter.development_options(name)
-  let provider = noop_adapter.new()
+  let assert Ok(_) =
+    test_helpers.with_provider_module_with_options(
+      noop_adapter.new,
+      adapter.development_options(name),
+      fn(provider, handle) {
+        let local = "node_a@localhost"
+        let remote = "node_d@localhost"
 
-  let assert Ok(handle) = { provider.init }(options)
+        // Establish context
+        let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
+        let assert Some(ctx) = { provider.secure_context }(handle, remote)
 
-  let local = "node_a@localhost"
-  let remote = "node_d@localhost"
+        // Encrypt
+        let plaintext = <<"Hello, secure world!">>
+        let encrypt_result = { provider.encrypt }(handle, ctx, plaintext)
+        should.be_ok(encrypt_result)
 
-  // Establish context
-  let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
-  let assert Some(ctx) = { provider.secure_context }(handle, remote)
+        let assert Ok(ciphertext) = encrypt_result
+        // Noop adapter returns identity
+        should.equal(ciphertext, plaintext)
 
-  // Encrypt
-  let plaintext = <<"Hello, secure world!">>
-  let encrypt_result = { provider.encrypt }(handle, ctx, plaintext)
-  should.be_ok(encrypt_result)
+        // Decrypt
+        let decrypt_result = { provider.decrypt }(handle, ctx, ciphertext)
+        should.be_ok(decrypt_result)
 
-  let assert Ok(ciphertext) = encrypt_result
-  // Noop adapter returns identity
-  should.equal(ciphertext, plaintext)
+        let assert Ok(decrypted) = decrypt_result
+        should.equal(decrypted, plaintext)
 
-  // Decrypt
-  let decrypt_result = { provider.decrypt }(handle, ctx, ciphertext)
-  should.be_ok(decrypt_result)
-
-  let assert Ok(decrypted) = decrypt_result
-  should.equal(decrypted, plaintext)
-
-  // Cleanup
-  let _ = { provider.shutdown }(handle)
+        Nil
+      },
+    )
 }
 
 pub fn crypto_encrypt_multiple_messages_test() {
   let name = "test_crypto_multi"
-  let options = adapter.development_options(name)
-  let provider = noop_adapter.new()
+  let assert Ok(_) =
+    test_helpers.with_provider_module_with_options(
+      noop_adapter.new,
+      adapter.development_options(name),
+      fn(provider, handle) {
+        let local = "node_a@localhost"
+        let remote = "node_e@localhost"
 
-  let assert Ok(handle) = { provider.init }(options)
+        let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
+        let assert Some(ctx) = { provider.secure_context }(handle, remote)
 
-  let local = "node_a@localhost"
-  let remote = "node_e@localhost"
+        // Multiple encryptions
+        let msg1 = <<"Message 1">>
+        let msg2 = <<"Message 2 is longer">>
+        let msg3 = <<1, 2, 3, 4, 5>>
 
-  let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
-  let assert Some(ctx) = { provider.secure_context }(handle, remote)
+        let assert Ok(enc1) = { provider.encrypt }(handle, ctx, msg1)
+        let assert Ok(enc2) = { provider.encrypt }(handle, ctx, msg2)
+        let assert Ok(enc3) = { provider.encrypt }(handle, ctx, msg3)
 
-  // Multiple encryptions
-  let msg1 = <<"Message 1">>
-  let msg2 = <<"Message 2 is longer">>
-  let msg3 = <<1, 2, 3, 4, 5>>
+        // Decrypt all
+        let assert Ok(dec1) = { provider.decrypt }(handle, ctx, enc1)
+        let assert Ok(dec2) = { provider.decrypt }(handle, ctx, enc2)
+        let assert Ok(dec3) = { provider.decrypt }(handle, ctx, enc3)
 
-  let assert Ok(enc1) = { provider.encrypt }(handle, ctx, msg1)
-  let assert Ok(enc2) = { provider.encrypt }(handle, ctx, msg2)
-  let assert Ok(enc3) = { provider.encrypt }(handle, ctx, msg3)
+        should.equal(dec1, msg1)
+        should.equal(dec2, msg2)
+        should.equal(dec3, msg3)
 
-  // Decrypt all
-  let assert Ok(dec1) = { provider.decrypt }(handle, ctx, enc1)
-  let assert Ok(dec2) = { provider.decrypt }(handle, ctx, enc2)
-  let assert Ok(dec3) = { provider.decrypt }(handle, ctx, enc3)
-
-  should.equal(dec1, msg1)
-  should.equal(dec2, msg2)
-  should.equal(dec3, msg3)
-
-  // Cleanup
-  let _ = { provider.shutdown }(handle)
+        Nil
+      },
+    )
 }
 
 // =============================================================================
@@ -196,31 +204,32 @@ pub fn crypto_encrypt_multiple_messages_test() {
 
 pub fn crypto_rekey_updates_key_id_test() {
   let name = "test_crypto_rekey"
-  let options = adapter.development_options(name)
-  let provider = noop_adapter.new()
+  let assert Ok(_) =
+    test_helpers.with_provider_module_with_options(
+      noop_adapter.new,
+      adapter.development_options(name),
+      fn(provider, handle) {
+        let local = "node_a@localhost"
+        let remote = "node_f@localhost"
 
-  let assert Ok(handle) = { provider.init }(options)
+        let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
+        let assert Some(ctx1) = { provider.secure_context }(handle, remote)
+        let key_id1 = types.context_key_id(ctx1)
 
-  let local = "node_a@localhost"
-  let remote = "node_f@localhost"
+        // Rekey
+        let rekey_result = { provider.rekey }(handle, remote)
+        should.be_ok(rekey_result)
 
-  let assert Ok(_) = { provider.handshake_start }(handle, local, remote, None)
-  let assert Some(ctx1) = { provider.secure_context }(handle, remote)
-  let key_id1 = types.context_key_id(ctx1)
+        // New context has different key_id
+        let assert Some(ctx2) = { provider.secure_context }(handle, remote)
+        let key_id2 = types.context_key_id(ctx2)
 
-  // Rekey
-  let rekey_result = { provider.rekey }(handle, remote)
-  should.be_ok(rekey_result)
+        // Key IDs should be different
+        should.not_equal(key_id1, key_id2)
 
-  // New context has different key_id
-  let assert Some(ctx2) = { provider.secure_context }(handle, remote)
-  let key_id2 = types.context_key_id(ctx2)
-
-  // Key IDs should be different
-  should.not_equal(key_id1, key_id2)
-
-  // Cleanup
-  let _ = { provider.shutdown }(handle)
+        Nil
+      },
+    )
 }
 
 pub fn crypto_rekey_without_context_fails_test() {
@@ -299,8 +308,7 @@ pub fn crypto_health_returns_degraded_in_dev_mode_test() {
     types.Degraded(msg) -> {
       // Development mode shows degraded because no real encryption
       should.be_true(
-        msg == "Development mode - no real encryption"
-        || msg != "",
+        msg == "Development mode - no real encryption" || msg != "",
       )
     }
     types.Up -> Nil

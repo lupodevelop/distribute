@@ -346,7 +346,10 @@ pub fn x25519_keypair_property_test() {
 }
 
 @external(erlang, "crypto_sodium_ffi", "scalarmult")
-fn ffi_scalarmult(peer_pub: BitArray, our_priv: BitArray) -> Result(BitArray, Nil)
+fn ffi_scalarmult(
+  peer_pub: BitArray,
+  our_priv: BitArray,
+) -> Result(BitArray, Nil)
 
 pub fn x25519_shared_secret_commutative_property_test() {
   // Property: A's priv + B's pub == B's priv + A's pub (shared secret)
