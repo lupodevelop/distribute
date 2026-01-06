@@ -26,11 +26,38 @@ This release introduces **capability negotiation** and **protocol versioning** a
 - **Comprehensive test coverage**: Unit tests for negotiation logic (compatible/incompatible ranges, missing protocols), integration tests for handshake ↔ registry ↔ negotiation flow.
 
 - **Actor module improvements**:  
-  - Mantained v2.0.0 compatibility for legacy functions `actor.start` and `actor.start_global`.  
+  - Maintained v2.0.0 compatibility for legacy functions `actor.start` and `actor.start_global`.  
   - Added type-safe helpers: `actor.start_typed_actor` and `actor.start_server` which return `GlobalSubject(msg)`.  
   - Added supervision helpers: `actor.child_spec_typed_actor` and `actor.child_spec_server` (return `ChildSpecification(Subject(BitArray))` for OTP compatibility).  
+  - **NEW**: Added convenience helpers for common patterns:
+    - `actor.start_typed_actor_registered(name, ...)` — combines actor start + global registration in one call
+    - `actor.start_typed_actor_started(...)` — returns `actor.Started(GlobalSubject(msg))` for advanced supervision use-cases
+    - `actor.child_spec_typed_actor_typed(...)` — fully typed child spec returning `GlobalSubject(msg)` instead of raw subject
+  - **NEW**: Added high-level supervision helpers:
+    - `actor.start_typed_actor_supervised(...)` — starts actor under supervisor in one call, returns `(Pid, GlobalSubject(msg))`
+    - `actor.pool_supervisor(pool_size, ...)` — creates N worker actors under supervisor for load balancing and parallel processing
   - Marked legacy low-level APIs as **deprecated** and added migration guidance in `MIGRATION.md`.  
   - Updated documentation and tests to cover typed actors and supervision integration; test suite updated to include child-spec creation checks.
+  - Added advanced examples demonstrating SWIM and Raft integration patterns (see `examples/advanced_patterns/`)
+
+- **Registry improvements**:
+  - **Import consistency audit**: Verified all `Subject` references consistently use `process.Subject(BitArray)` or `global.GlobalSubject(msg)`
+  - **NEW**: Added convenience wrappers for common registry patterns:
+    - `registry.register_global(global_subject, name)` — register a GlobalSubject directly without extracting its internal subject
+    - `registry.register_with_retry(global_subject, name, retries, delay)` — synchronous registration with retry logic for network errors
+    - `registry.lookup_global(name, encoder, decoder)` — convenience alias for `whereis_global`
+    - `registry.lookup_with_timeout(name, encoder, decoder, timeout, poll_interval)` — blocking lookup with timeout and polling
+    - `registry.is_registered(name)` — efficient existence check without creating a Subject
+    - `registry.unregister_and_remove(name)` — cleanup both global registry and persistent_term storage
+  - All new registry functions are **non-breaking additions** — legacy APIs remain intact
+
+- **Documentation and examples**:
+  - **NEW**: Added `examples/practical_patterns/` directory with production-ready examples:
+    - `supervision_example.gleam` — demonstrates single supervised actors, worker pools, nested supervision trees, and named actors with registry
+    - `registry_patterns.gleam` — shows manual vs convenience registration, supervised+registered pattern, service directory, and async registration
+    - Comprehensive `README.md` with pattern comparison table, best practices, common pitfalls, and multi-node setup guidance
+  - All examples demonstrate proper usage of `GlobalSubject(msg)` for type-safe messaging
+  - Examples include detailed comments explaining when to use each pattern and common anti-patterns to avoid
 
 ### Breaking changes
 - **No breaking changes**: This release is fully backward compatible with v2.0.0. New APIs are additive.
