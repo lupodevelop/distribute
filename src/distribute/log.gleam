@@ -362,8 +362,6 @@ fn set_persistent_term(key: String, value: Bool) -> Nil
 @external(erlang, "persistent_term", "get")
 fn get_persistent_term(key: String, default: Bool) -> Bool
 
-
-
 // String variants for tests and lightweight state
 @external(erlang, "persistent_term", "put")
 fn set_persistent_term_str(key: String, value: String) -> Nil

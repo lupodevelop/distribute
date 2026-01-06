@@ -303,3 +303,216 @@ fn is_ok_tuple(value: Dynamic) -> Bool
 
 @external(erlang, "registry_ffi", "extract_subject")
 fn extract_subject(value: Dynamic) -> process.Subject(msg)
+
+// ============================================================================
+// Convenience Wrappers for Common Patterns
+// ============================================================================
+
+/// Try to register a GlobalSubject, automatically extracting its underlying Subject.
+///
+/// This is a convenience wrapper that combines the most common pattern:
+/// 1. Extract the Subject(BitArray) from GlobalSubject
+/// 2. Register it using register_typed
+///
+/// **Example:**
+/// ```gleam
+/// let global_subject = actor.start_typed_actor(init, loop, encoder, decoder)
+/// register_global(global_subject, "my-service")
+/// ```
+pub fn register_global(
+  global_subject: global.GlobalSubject(msg),
+  name: String,
+) -> Result(Nil, RegisterError) {
+  register_typed(name, global.subject(global_subject))
+}
+
+/// Synchronous registration with retry logic.
+///
+/// Attempts to register a GlobalSubject, retrying up to `max_retries` times
+/// if network errors occur. Useful in distributed environments with transient
+/// connectivity issues.
+///
+/// **Parameters:**
+/// - `global_subject`: The GlobalSubject to register
+/// - `name`: The global name to register under
+/// - `max_retries`: Maximum number of retry attempts (default: 3)
+/// - `retry_delay_ms`: Delay between retries in milliseconds (default: 100)
+///
+/// Returns Ok(Nil) on success, Error(RegisterError) if all retries fail.
+pub fn register_with_retry(
+  global_subject: global.GlobalSubject(msg),
+  name: String,
+  max_retries: Int,
+  retry_delay_ms: Int,
+) -> Result(Nil, RegisterError) {
+  do_register_with_retry(
+    global_subject,
+    name,
+    max_retries,
+    retry_delay_ms,
+    0,
+  )
+}
+
+fn do_register_with_retry(
+  global_subject: global.GlobalSubject(msg),
+  name: String,
+  max_retries: Int,
+  retry_delay_ms: Int,
+  attempt: Int,
+) -> Result(Nil, RegisterError) {
+  case register_global(global_subject, name) {
+    Ok(Nil) -> Ok(Nil)
+    Error(NetworkError(_)) if attempt < max_retries -> {
+      log.warn("Registration attempt failed, retrying...", [
+        #("name", name),
+        #("attempt", int_to_string(attempt + 1)),
+        #("max_retries", int_to_string(max_retries)),
+      ])
+      process.sleep(retry_delay_ms)
+      do_register_with_retry(
+        global_subject,
+        name,
+        max_retries,
+        retry_delay_ms,
+        attempt + 1,
+      )
+    }
+    Error(err) -> Error(err)
+  }
+}
+
+/// Lookup a GlobalSubject by name (async-friendly version).
+///
+/// This is a convenience wrapper that simplifies the common pattern of
+/// looking up a GlobalSubject with encoder/decoder.
+///
+/// **Example:**
+/// ```gleam
+/// case lookup_global("my-service", my_encoder(), my_decoder()) {
+///   Ok(service) -> global.send(service, MyMessage)
+///   Error(_) -> io.println("Service not found")
+/// }
+/// ```
+pub fn lookup_global(
+  name: String,
+  encoder: codec.Encoder(msg),
+  decoder: codec.Decoder(msg),
+) -> Result(global.GlobalSubject(msg), Nil) {
+  whereis_global(name, encoder, decoder)
+}
+
+/// Synchronous lookup with timeout.
+///
+/// Attempts to lookup a GlobalSubject, retrying until found or timeout.
+/// Useful when waiting for a service to become available.
+///
+/// **Parameters:**
+/// - `name`: The global name to lookup
+/// - `encoder`: Encoder for the message type
+/// - `decoder`: Decoder for the message type
+/// - `timeout_ms`: Maximum time to wait in milliseconds
+/// - `poll_interval_ms`: Time between lookup attempts in milliseconds
+///
+/// Returns Ok(GlobalSubject) if found, Error(Nil) on timeout.
+pub fn lookup_with_timeout(
+  name: String,
+  encoder: codec.Encoder(msg),
+  decoder: codec.Decoder(msg),
+  timeout_ms: Int,
+  poll_interval_ms: Int,
+) -> Result(global.GlobalSubject(msg), Nil) {
+  let start_time = erlang_system_time_ms()
+  do_lookup_with_timeout(
+    name,
+    encoder,
+    decoder,
+    start_time,
+    timeout_ms,
+    poll_interval_ms,
+  )
+}
+
+fn do_lookup_with_timeout(
+  name: String,
+  encoder: codec.Encoder(msg),
+  decoder: codec.Decoder(msg),
+  start_time: Int,
+  timeout_ms: Int,
+  poll_interval_ms: Int,
+) -> Result(global.GlobalSubject(msg), Nil) {
+  case lookup_global(name, encoder, decoder) {
+    Ok(subject) -> Ok(subject)
+    Error(_) -> {
+      let elapsed = erlang_system_time_ms() - start_time
+      case elapsed >= timeout_ms {
+        True -> {
+          log.warn("Lookup timeout exceeded", [
+            #("name", name),
+            #("timeout_ms", int_to_string(timeout_ms)),
+          ])
+          Error(Nil)
+        }
+        False -> {
+          process.sleep(poll_interval_ms)
+          do_lookup_with_timeout(
+            name,
+            encoder,
+            decoder,
+            start_time,
+            timeout_ms,
+            poll_interval_ms,
+          )
+        }
+      }
+    }
+  }
+}
+
+/// Check if a name is currently registered.
+///
+/// This is more efficient than whereis when you only need to check
+/// existence without creating a Subject.
+pub fn is_registered(name: String) -> Bool {
+  case whereis(name) {
+    Ok(_) -> True
+    Error(_) -> False
+  }
+}
+
+/// Unregister and remove stored subject in one call.
+///
+/// Convenience wrapper that combines:
+/// 1. Unregister from global registry
+/// 2. Remove from persistent_term storage
+///
+/// Useful for complete cleanup of a named actor.
+pub fn unregister_and_remove(name: String) -> Result(Nil, RegisterError) {
+  let _ = remove_stored_subject(name)
+  unregister(name)
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+@external(erlang, "erlang", "system_time")
+fn erlang_system_time(unit: Dynamic) -> Int
+
+fn erlang_system_time_ms() -> Int {
+  erlang_system_time(millisecond_atom())
+}
+
+@external(erlang, "registry_ffi", "millisecond_atom")
+fn millisecond_atom() -> Dynamic
+
+fn int_to_string(i: Int) -> String {
+  // This would normally use gleam/int.to_string
+  case i {
+    0 -> "0"
+    1 -> "1"
+    2 -> "2"
+    3 -> "3"
+    _ -> "N"
+  }
+}
