@@ -115,6 +115,46 @@ Replace untyped `remote_call.call` with `remote_call.call_typed` or `call_typed_
 - Always handle decode/encode errors returned as `Result` instead of assuming success.
 - When registering global subjects, prefer `start_global_receiver` so the subject uses the `Nil` tag and works with `registry.register_typed`.
 
+## Actor API deprecations
+
+To prepare for the v3.0.0 release we are deprecating a small set of low-level
+actor APIs that were historically used to obtain raw `Subject(BitArray)` values
+and to start untyped actors. These APIs will be removed in v3.0.0.
+
+Deprecated APIs:
+- `actor.start(initial_state, decoder, handler)` — use `actor.start_typed_actor`
+  and obtain the raw subject via `global.subject` or `global.from_subject` if
+  needed.
+- `actor.start_global(initial_state, decoder, handler)` — use
+  `actor.start_typed_actor` + `global.from_subject` or register the typed
+  subject with `registry.register_typed`.
+
+Migration examples:
+
+1) Replace `start` with `start_typed_actor` and extract subject:
+
+```gleam
+// Old (deprecated)
+let assert Ok(subject) = actor.start(0, my_decoder(), my_handler)
+// New (typed)
+let gs = actor.start_typed_actor(0, my_encoder(), my_decoder(), my_handler)
+let subject = global.subject(gs)
+```
+
+2) Replace `start_global` with `start_typed_actor` and register:
+
+```gleam
+// Old (deprecated)
+let subject = actor.start_global(0, my_decoder(), my_handler)
+// New (typed)
+let gs = actor.start_typed_actor(0, my_encoder(), my_decoder(), my_handler)
+registry.register_typed("my_name", gs)
+```
+
+3) Supervisors: `child_spec_*` helpers now return `ChildSpecification(Subject(BitArray))`.
+   If you prefer a typed wrapper after the child started, call `global.from_subject`
+   with the returned subject and codecs in the parent process when appropriate.
+
 ## Where to get help
 
 - Examples: `examples/typed_messaging/` and `examples/two_nodes/`.

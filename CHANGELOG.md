@@ -25,6 +25,13 @@ This release introduces **capability negotiation** and **protocol versioning** a
 - **Validation helpers**: `validate_capabilities(caps)` ensures capability definitions are well-formed (min ≤ max, non-empty protocol names).
 - **Comprehensive test coverage**: Unit tests for negotiation logic (compatible/incompatible ranges, missing protocols), integration tests for handshake ↔ registry ↔ negotiation flow.
 
+- **Actor module improvements**:  
+  - Mantained v2.0.0 compatibility for legacy functions `actor.start` and `actor.start_global`.  
+  - Added type-safe helpers: `actor.start_typed_actor` and `actor.start_server` which return `GlobalSubject(msg)`.  
+  - Added supervision helpers: `actor.child_spec_typed_actor` and `actor.child_spec_server` (return `ChildSpecification(Subject(BitArray))` for OTP compatibility).  
+  - Marked legacy low-level APIs as **deprecated** and added migration guidance in `MIGRATION.md`.  
+  - Updated documentation and tests to cover typed actors and supervision integration; test suite updated to include child-spec creation checks.
+
 ### Breaking changes
 - **No breaking changes**: This release is fully backward compatible with v2.0.0. New APIs are additive.
 
