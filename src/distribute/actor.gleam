@@ -98,6 +98,13 @@
 /// - `distribute/registry` for global name registration
 /// - `distribute/messaging` for cross-node communication
 ///
+/// **Deprecation policy:**
+/// - Legacy low-level APIs `start` and `start_global` are **deprecated** and are
+///   scheduled for removal in v3.0.0.
+/// - Prefer the type-safe helpers: `start_typed_actor` and `start_server`.
+/// - See `MIGRATION.md` → "Actor API deprecations" for migration examples and
+///   suggested codemods.
+///
 import distribute/codec.{type Decoder, type Encoder}
 import distribute/global
 import distribute/receiver
