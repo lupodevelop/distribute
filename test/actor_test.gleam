@@ -96,20 +96,22 @@ fn request_decoder() -> codec.Decoder(RequestMsg) {
 pub fn start_typed_actor_basic_test() {
   // Test basic actor creation and messaging
   let counter =
-    actor.start_typed_actor(0, counter_encoder(), counter_decoder(), fn(
-      msg,
-      count,
-    ) {
-      case msg {
-        Increment -> receiver.Continue(count + 1)
-        Decrement -> receiver.Continue(count - 1)
-        GetCount(reply) -> {
-          process.send(reply, count)
-          receiver.Continue(count)
+    actor.start_typed_actor(
+      0,
+      counter_encoder(),
+      counter_decoder(),
+      fn(msg, count) {
+        case msg {
+          Increment -> receiver.Continue(count + 1)
+          Decrement -> receiver.Continue(count - 1)
+          GetCount(reply) -> {
+            process.send(reply, count)
+            receiver.Continue(count)
+          }
+          Shutdown -> receiver.Stop
         }
-        Shutdown -> receiver.Stop
-      }
-    })
+      },
+    )
 
   // Send increment message
   let assert Ok(_) = global.send(counter, Increment)
@@ -127,20 +129,22 @@ pub fn start_typed_actor_basic_test() {
 pub fn start_typed_actor_state_test() {
   // Test state accumulation
   let counter =
-    actor.start_typed_actor(0, counter_encoder(), counter_decoder(), fn(
-      msg,
-      count,
-    ) {
-      case msg {
-        Increment -> receiver.Continue(count + 1)
-        Decrement -> receiver.Continue(count - 1)
-        GetCount(reply) -> {
-          process.send(reply, count)
-          receiver.Continue(count)
+    actor.start_typed_actor(
+      0,
+      counter_encoder(),
+      counter_decoder(),
+      fn(msg, count) {
+        case msg {
+          Increment -> receiver.Continue(count + 1)
+          Decrement -> receiver.Continue(count - 1)
+          GetCount(reply) -> {
+            process.send(reply, count)
+            receiver.Continue(count)
+          }
+          Shutdown -> receiver.Stop
         }
-        Shutdown -> receiver.Stop
-      }
-    })
+      },
+    )
 
   // Increment 5 times
   let assert Ok(_) = global.send(counter, Increment)
@@ -156,7 +160,6 @@ pub fn start_typed_actor_state_test() {
   let assert Ok(_) = global.send(counter, Decrement)
 
   process.sleep(50)
-
   // Final count should be 3 (5 - 2)
   // Note: We can't easily verify the exact count without adding a GetCount
   // handler that actually sends the value, which would require a more
@@ -167,20 +170,22 @@ pub fn start_typed_actor_state_test() {
 pub fn start_typed_actor_shutdown_test() {
   // Test graceful shutdown with Stop directive
   let counter =
-    actor.start_typed_actor(0, counter_encoder(), counter_decoder(), fn(
-      msg,
-      count,
-    ) {
-      case msg {
-        Increment -> receiver.Continue(count + 1)
-        Decrement -> receiver.Continue(count - 1)
-        GetCount(reply) -> {
-          process.send(reply, count)
-          receiver.Continue(count)
+    actor.start_typed_actor(
+      0,
+      counter_encoder(),
+      counter_decoder(),
+      fn(msg, count) {
+        case msg {
+          Increment -> receiver.Continue(count + 1)
+          Decrement -> receiver.Continue(count - 1)
+          GetCount(reply) -> {
+            process.send(reply, count)
+            receiver.Continue(count)
+          }
+          Shutdown -> receiver.Stop
         }
-        Shutdown -> receiver.Stop
-      }
-    })
+      },
+    )
 
   // Send some messages
   let assert Ok(_) = global.send(counter, Increment)
@@ -189,32 +194,33 @@ pub fn start_typed_actor_shutdown_test() {
   // Send shutdown
   let assert Ok(_) = global.send(counter, Shutdown)
   process.sleep(50)
-
   // Actor should have stopped gracefully
 }
 
 pub fn start_server_basic_test() {
   // Test server pattern with request-response
   let server =
-    actor.start_server(Nil, request_encoder(), request_decoder(), fn(
-      req,
-      state,
-    ) {
-      case req {
-        Add(a, b, reply) -> {
-          process.send(reply, a + b)
-          receiver.Continue(state)
+    actor.start_server(
+      Nil,
+      request_encoder(),
+      request_decoder(),
+      fn(req, state) {
+        case req {
+          Add(a, b, reply) -> {
+            process.send(reply, a + b)
+            receiver.Continue(state)
+          }
+          Multiply(a, b, reply) -> {
+            process.send(reply, a * b)
+            receiver.Continue(state)
+          }
+          Fail(reply) -> {
+            process.send(reply, Error("Intentional failure"))
+            receiver.Continue(state)
+          }
         }
-        Multiply(a, b, reply) -> {
-          process.send(reply, a * b)
-          receiver.Continue(state)
-        }
-        Fail(reply) -> {
-          process.send(reply, Error("Intentional failure"))
-          receiver.Continue(state)
-        }
-      }
-    })
+      },
+    )
 
   // Send Add request
   let assert Ok(_) = global.send(server, Add(10, 20, process.new_subject()))
@@ -247,15 +253,16 @@ pub fn start_server_stateful_test() {
     }
   }
 
-  let server = actor.start_server(0, encoder, decoder, fn(req, sum) {
-    case req {
-      Store(n) -> receiver.Continue(sum + n)
-      GetSum(reply) -> {
-        process.send(reply, sum)
-        receiver.Continue(sum)
+  let server =
+    actor.start_server(0, encoder, decoder, fn(req, sum) {
+      case req {
+        Store(n) -> receiver.Continue(sum + n)
+        GetSum(reply) -> {
+          process.send(reply, sum)
+          receiver.Continue(sum)
+        }
       }
-    }
-  })
+    })
 
   // Store some values
   let assert Ok(_) = global.send(server, Store(10))
@@ -274,10 +281,8 @@ pub fn child_spec_typed_actor_creates_spec_test() {
   // We only verify it compiles and creates a spec without actually starting
   // the supervisor, as supervisor integration testing may have timing issues
   // in the test framework.
-  let _child = actor.child_spec_typed_actor(
-    0,
-    counter_decoder(),
-    fn(msg, count) {
+  let _child =
+    actor.child_spec_typed_actor(0, counter_decoder(), fn(msg, count) {
       case msg {
         Increment -> receiver.Continue(count + 1)
         Decrement -> receiver.Continue(count - 1)
@@ -287,18 +292,15 @@ pub fn child_spec_typed_actor_creates_spec_test() {
         }
         Shutdown -> receiver.Stop
       }
-    },
-  )
+    })
   // If we reach here, the child spec was created successfully
   should.be_true(True)
 }
 
 pub fn child_spec_server_creates_spec_test() {
   // Test that child_spec_server creates a valid ChildSpecification
-  let _child = actor.child_spec_server(
-    Nil,
-    request_decoder(),
-    fn(req, state) {
+  let _child =
+    actor.child_spec_server(Nil, request_decoder(), fn(req, state) {
       case req {
         Add(a, b, reply) -> {
           process.send(reply, a + b)
@@ -313,39 +315,40 @@ pub fn child_spec_server_creates_spec_test() {
           receiver.Continue(state)
         }
       }
-    },
-  )
+    })
   // If we reach here, the child spec was created successfully
   should.be_true(True)
 }
 
 pub fn start_and_start_global_compatibility_test() {
   // Test that start() and start_global() still work (legacy API)
-  let result1 = actor.start(0, counter_decoder(), fn(msg, count) {
-    case msg {
-      Increment -> receiver.Continue(count + 1)
-      Decrement -> receiver.Continue(count - 1)
-      GetCount(reply) -> {
-        process.send(reply, count)
-        receiver.Continue(count)
+  let result1 =
+    actor.start(0, counter_decoder(), fn(msg, count) {
+      case msg {
+        Increment -> receiver.Continue(count + 1)
+        Decrement -> receiver.Continue(count - 1)
+        GetCount(reply) -> {
+          process.send(reply, count)
+          receiver.Continue(count)
+        }
+        Shutdown -> receiver.Stop
       }
-      Shutdown -> receiver.Stop
-    }
-  })
+    })
 
   should.be_ok(result1)
 
-  let subject2 = actor.start_global(0, counter_decoder(), fn(msg, count) {
-    case msg {
-      Increment -> receiver.Continue(count + 1)
-      Decrement -> receiver.Continue(count - 1)
-      GetCount(reply) -> {
-        process.send(reply, count)
-        receiver.Continue(count)
+  let subject2 =
+    actor.start_global(0, counter_decoder(), fn(msg, count) {
+      case msg {
+        Increment -> receiver.Continue(count + 1)
+        Decrement -> receiver.Continue(count - 1)
+        GetCount(reply) -> {
+          process.send(reply, count)
+          receiver.Continue(count)
+        }
+        Shutdown -> receiver.Stop
       }
-      Shutdown -> receiver.Stop
-    }
-  })
+    })
 
   // Should return a valid subject
   // We verify it's usable by sending a raw BitArray message

@@ -85,12 +85,9 @@ pub fn start_typed_actor_basic_test() {
   let decoder = codec.int_decoder()
 
   let actor =
-    receiver.start_typed_actor(
-      0,
-      encoder,
-      decoder,
-      fn(_msg, state) { receiver.Continue(state + 1) },
-    )
+    receiver.start_typed_actor(0, encoder, decoder, fn(_msg, state) {
+      receiver.Continue(state + 1)
+    })
 
   // Send a message to the actor
   let assert Ok(_) = global.send(actor, 42)
@@ -133,21 +130,16 @@ pub fn start_typed_actor_state_accumulation_test() {
   }
 
   let actor =
-    receiver.start_typed_actor(
-      0,
-      encoder,
-      decoder,
-      fn(msg, sum) {
-        case msg {
-          Add(n) -> receiver.Continue(sum + n)
-          GetSum(reply) -> {
-            let assert Ok(encoded) = codec.int_encoder()(sum)
-            process.send(reply, encoded)
-            receiver.Continue(sum)
-          }
+    receiver.start_typed_actor(0, encoder, decoder, fn(msg, sum) {
+      case msg {
+        Add(n) -> receiver.Continue(sum + n)
+        GetSum(reply) -> {
+          let assert Ok(encoded) = codec.int_encoder()(sum)
+          process.send(reply, encoded)
+          receiver.Continue(sum)
         }
-      },
-    )
+      }
+    })
 
   // Send some Add messages
   let assert Ok(_) = global.send(actor, Add(10))
@@ -180,17 +172,12 @@ pub fn start_typed_actor_stop_test() {
   }
 
   let actor =
-    receiver.start_typed_actor(
-      Nil,
-      encoder,
-      decoder,
-      fn(msg, state) {
-        case msg {
-          Ping -> receiver.Continue(state)
-          Shutdown -> receiver.Stop
-        }
-      },
-    )
+    receiver.start_typed_actor(Nil, encoder, decoder, fn(msg, state) {
+      case msg {
+        Ping -> receiver.Continue(state)
+        Shutdown -> receiver.Stop
+      }
+    })
 
   // Send ping - should work
   let assert Ok(_) = global.send(actor, Ping)
@@ -199,6 +186,5 @@ pub fn start_typed_actor_stop_test() {
   // Send shutdown
   let assert Ok(_) = global.send(actor, Shutdown)
   process.sleep(50)
-
   // Actor should be stopped now (we can't easily test this without monitoring)
 }
