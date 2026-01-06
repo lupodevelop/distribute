@@ -10,15 +10,15 @@
 import distribute/actor
 import distribute/codec
 import distribute/global
+import distribute/log
 import distribute/receiver
 import distribute/registry
 import distribute/settings
-import distribute/log as log
 import gleam/erlang/process
+import gleam/option
 import gleam/otp/static_supervisor
-import gleeunit/should
-import gleam/option as option
 import gleam/string
+import gleeunit/should
 
 // Test message types
 pub type CounterMsg {
@@ -330,11 +330,15 @@ pub fn deprecated_start_logs_warning_test() {
   // Ensure deprecation warning is logged when using legacy start()
   log.clear_last_log_entry_for_test()
   log.enable_logging()
-  let _ = actor.start(0, counter_decoder(), fn(msg, count) { receiver.Continue(count) })
+  let _ =
+    actor.start(0, counter_decoder(), fn(msg, count) {
+      receiver.Continue(count)
+    })
   process.sleep(10)
   log.disable_logging()
   case log.last_log_entry_for_test() {
-    option.Some(entry) -> should.be_true(string.contains(entry, "actor.start is deprecated"))
+    option.Some(entry) ->
+      should.be_true(string.contains(entry, "actor.start is deprecated"))
     option.None -> should.fail()
   }
 }
@@ -343,11 +347,15 @@ pub fn deprecated_start_global_logs_warning_test() {
   // Ensure deprecation warning is logged when using legacy start_global()
   log.clear_last_log_entry_for_test()
   log.enable_logging()
-  let _ = actor.start_global(0, counter_decoder(), fn(msg, count) { receiver.Continue(count) })
+  let _ =
+    actor.start_global(0, counter_decoder(), fn(msg, count) {
+      receiver.Continue(count)
+    })
   process.sleep(10)
   log.disable_logging()
   case log.last_log_entry_for_test() {
-    option.Some(entry) -> should.be_true(string.contains(entry, "actor.start_global is deprecated"))
+    option.Some(entry) ->
+      should.be_true(string.contains(entry, "actor.start_global is deprecated"))
     option.None -> should.fail()
   }
 }
@@ -391,7 +399,14 @@ pub fn start_and_start_global_compatibility_test() {
 pub fn start_typed_actor_registered_test() {
   settings.set_allow_atom_creation(True)
   let name = "test_actor_reg_" <> log.generate_correlation_id()
-  let res = actor.start_typed_actor_registered(name, 0, counter_encoder(), counter_decoder(), fn(_msg, count) { receiver.Continue(count) })
+  let res =
+    actor.start_typed_actor_registered(
+      name,
+      0,
+      counter_encoder(),
+      counter_decoder(),
+      fn(_msg, count) { receiver.Continue(count) },
+    )
   should.be_ok(res)
   // Cleanup - unregister the actor
   let _ = registry.unregister(name)
@@ -399,17 +414,28 @@ pub fn start_typed_actor_registered_test() {
 }
 
 pub fn start_typed_actor_started_test() {
-  let res = actor.start_typed_actor_started(0, counter_encoder(), counter_decoder(), fn(_msg, count) { receiver.Continue(count) })
+  let res =
+    actor.start_typed_actor_started(
+      0,
+      counter_encoder(),
+      counter_decoder(),
+      fn(_msg, count) { receiver.Continue(count) },
+    )
   should.be_ok(res)
   Nil
 }
 
 pub fn child_spec_typed_actor_typed_test() {
-  let child = actor.child_spec_typed_actor_typed(0, counter_encoder(), counter_decoder(), fn(_msg, count) { receiver.Continue(count) })
+  let child =
+    actor.child_spec_typed_actor_typed(
+      0,
+      counter_encoder(),
+      counter_decoder(),
+      fn(_msg, count) { receiver.Continue(count) },
+    )
   let builder = static_supervisor.new(static_supervisor.OneForOne)
   let builder = static_supervisor.add(builder, child)
   let result = static_supervisor.start(builder)
   should.be_ok(result)
   Nil
 }
-
