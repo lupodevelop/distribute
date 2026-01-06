@@ -4,7 +4,7 @@
          is_ok_atom/1, is_already_registered/1, get_error_reason/1,
          is_pid/1, dynamic_to_pid/1, make_subject/2,
          store_subject/2, get_subject/1, remove_subject/1,
-         is_ok_tuple/1, extract_subject/1]).
+         is_ok_tuple/1, extract_subject/1, millisecond_atom/0]).
 
 make_subject(Pid, Tag) -> {subject, Pid, Tag}.
 
@@ -107,3 +107,6 @@ is_ok_tuple(_) -> false.
 
 %% Extract Subject from {ok, Subject}
 extract_subject({ok, Subject}) -> Subject.
+
+%% Return the 'millisecond' atom for erlang:system_time/1
+millisecond_atom() -> millisecond.
