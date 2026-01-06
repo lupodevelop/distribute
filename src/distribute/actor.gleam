@@ -107,13 +107,15 @@
 ///
 import distribute/codec.{type Decoder, type Encoder}
 import distribute/global
-import distribute/receiver
-import distribute/registry as registry
 import distribute/log
+import distribute/receiver
+import distribute/registry
 import gleam/erlang/process
+import gleam/list
 import gleam/otp/actor
+import gleam/otp/static_supervisor
 import gleam/otp/supervision.{type ChildSpecification, worker}
-import gleam/result as result
+import gleam/result
 
 /// Errors that can occur when starting an actor.
 pub type ActorError {
@@ -441,5 +443,168 @@ pub fn child_spec_typed_actor_typed(
   decoder: Decoder(msg),
   handler: fn(msg, state) -> receiver.Next(state),
 ) -> ChildSpecification(global.GlobalSubject(msg)) {
-  worker(fn() { start_typed_actor_started(initial_state, encoder, decoder, handler) })
+  worker(fn() {
+    start_typed_actor_started(initial_state, encoder, decoder, handler)
+  })
+}
+
+/// Start a typed actor under a new supervisor in one call.
+///
+/// This high-level helper creates a supervisor, adds the typed actor as a child,
+/// and starts the supervisor tree. Returns both the supervisor PID and the
+/// typed actor's GlobalSubject for convenient access.
+///
+/// ## Parameters
+///
+/// - `initial_state`: The initial state for the actor
+/// - `encoder`: Encoder for messages
+/// - `decoder`: Decoder for messages
+/// - `handler`: Message handler function
+///
+/// ## Returns
+///
+/// `Ok((Pid, GlobalSubject(msg)))` on success with both handles,
+/// or `Error(StartError)` if supervision setup fails.
+///
+/// ## Example
+///
+/// ```gleam
+/// let result = actor.start_typed_actor_supervised(
+///   0,
+///   counter_encoder(),
+///   counter_decoder(),
+///   fn(msg, count) {
+///     case msg {
+///       Increment -> receiver.Continue(count + 1)
+///       GetCount(reply) -> {
+///         process.send(reply, count)
+///         receiver.Continue(count)
+///       }
+///     }
+///   },
+/// )
+///
+/// case result {
+///   Ok(#(sup_pid, actor_subject)) -> {
+///     // Use actor_subject for messaging
+///     let _ = global.send(actor_subject, Increment)
+///     // Supervisor will restart actor on crashes
+///   }
+///   Error(err) -> // handle error
+/// }
+/// ```
+pub fn start_typed_actor_supervised(
+  initial_state: state,
+  encoder: Encoder(msg),
+  decoder: Decoder(msg),
+  handler: fn(msg, state) -> receiver.Next(state),
+) -> Result(#(process.Pid, global.GlobalSubject(msg)), actor.StartError) {
+  // Create child spec for the typed actor
+  let child_spec =
+    child_spec_typed_actor_typed(initial_state, encoder, decoder, handler)
+
+  // Build supervisor with the actor as a child
+  let builder = static_supervisor.new(static_supervisor.OneForOne)
+  let builder = static_supervisor.add(builder, child_spec)
+
+  // Start supervisor
+  case static_supervisor.start(builder) {
+    Ok(sup) -> {
+      // Start the actor and get its GlobalSubject
+      case start_typed_actor_started(initial_state, encoder, decoder, handler) {
+        Ok(started) -> Ok(#(sup.pid, started.data))
+        Error(err) -> Error(err)
+      }
+    }
+    Error(err) -> Error(err)
+  }
+}
+
+/// Create a worker pool with N typed actors under a supervisor.
+///
+/// This helper creates a pool of identical worker actors, all supervised
+/// under a single supervisor. The pool can be used for load balancing,
+/// parallel processing, or handling concurrent requests.
+///
+/// ## Parameters
+///
+/// - `pool_size`: Number of worker actors to create
+/// - `initial_state`: Initial state for each worker (all start with same state)
+/// - `encoder`: Encoder for worker messages
+/// - `decoder`: Decoder for worker messages  
+/// - `handler`: Message handler for workers
+///
+/// ## Returns
+///
+/// `Ok((Pid, List(GlobalSubject(msg))))` with the supervisor PID and all worker subjects,
+/// or `Error(StartError)` if pool creation fails.
+///
+/// ## Example
+///
+/// ```gleam
+/// // Create a pool of 5 worker actors
+/// let result = actor.pool_supervisor(
+///   5,
+///   0,
+///   request_encoder(),
+///   request_decoder(),
+///   handle_request,
+/// )
+///
+/// case result {
+///   Ok(#(sup_pid, workers)) -> {
+///     // Round-robin distribution
+///     list.index_map(tasks, fn(task, idx) {
+///       let worker = list.at(workers, idx % list.length(workers))
+///       case worker {
+///         Ok(w) -> global.send(w, task)
+///         Error(_) -> Error(Nil)
+///       }
+///     })
+///   }
+///   Error(err) -> // handle error
+/// }
+/// ```
+pub fn pool_supervisor(
+  pool_size: Int,
+  initial_state: state,
+  encoder: Encoder(msg),
+  decoder: Decoder(msg),
+  handler: fn(msg, state) -> receiver.Next(state),
+) -> Result(#(process.Pid, List(global.GlobalSubject(msg))), actor.StartError) {
+  // Create child specs for all workers
+  let child_specs =
+    list.range(1, pool_size)
+    |> list.map(fn(_) {
+      child_spec_typed_actor_typed(initial_state, encoder, decoder, handler)
+    })
+
+  // Build supervisor with all workers
+  let builder = static_supervisor.new(static_supervisor.OneForOne)
+  let builder_with_children =
+    list.fold(child_specs, builder, fn(acc, spec) {
+      static_supervisor.add(acc, spec)
+    })
+
+  // Start supervisor
+  case static_supervisor.start(builder_with_children) {
+    Ok(sup) -> {
+      // Start all workers and collect their GlobalSubjects
+      let workers_result =
+        list.range(1, pool_size)
+        |> list.map(fn(_) {
+          start_typed_actor_started(initial_state, encoder, decoder, handler)
+        })
+        |> result.all()
+
+      case workers_result {
+        Ok(started_workers) -> {
+          let subjects = list.map(started_workers, fn(started) { started.data })
+          Ok(#(sup.pid, subjects))
+        }
+        Error(err) -> Error(err)
+      }
+    }
+    Error(err) -> Error(err)
+  }
 }
