@@ -29,7 +29,8 @@ pub type SendError {
   SendFailed(String)
 }
 
-type Dynamic
+// Dynamic type for FFI interop - used internally for untyped Erlang returns
+import gleam/dynamic.{type Dynamic}
 
 @external(erlang, "erlang", "send")
 fn send_ffi(pid: Pid, msg: a) -> a

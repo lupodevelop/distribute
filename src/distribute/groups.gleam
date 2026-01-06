@@ -25,7 +25,8 @@ pub type GroupError {
   MemberConversionFailed(String)
 }
 
-type Dynamic
+// Dynamic type for FFI interop
+import gleam/dynamic.{type Dynamic}
 
 @external(erlang, "groups_ffi", "join")
 fn join_ffi(group: String, pid: Pid) -> Dynamic

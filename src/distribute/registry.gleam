@@ -345,13 +345,7 @@ pub fn register_with_retry(
   max_retries: Int,
   retry_delay_ms: Int,
 ) -> Result(Nil, RegisterError) {
-  do_register_with_retry(
-    global_subject,
-    name,
-    max_retries,
-    retry_delay_ms,
-    0,
-  )
+  do_register_with_retry(global_subject, name, max_retries, retry_delay_ms, 0)
 }
 
 fn do_register_with_retry(

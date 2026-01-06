@@ -227,7 +227,7 @@ pub fn connect(node: String) -> Result(Nil, ConnectError) {
 
 /// Connect to another distributed node (legacy API).
 /// Returns True if connected successfully, False otherwise.
-/// @deprecated Use connect() which returns Result instead
+@deprecated("Use connect() which returns Result instead")
 pub fn connect_bool(node: String) -> Bool {
   is_true_ffi(connect_ffi(node))
 }

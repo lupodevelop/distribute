@@ -5,13 +5,28 @@ import gleam/bit_array
 import gleam/list
 import gleam/option.{type Option, None, Some}
 
-// Simple handshake state machine for initiator/responder roles.
+/// Handshake state machine for secure connection establishment.
+/// 
+/// This module implements the state transitions for both initiator and
+/// responder roles in a cryptographic handshake. The state machine handles:
+/// - Hello message exchange with capabilities
+/// - Protocol/version negotiation
+/// - Key exchange for establishing secure contexts
+/// - Retry logic for transient failures
 
+/// Role in the handshake - determines which state machine path to follow.
 pub type Role {
   Initiator
   Responder
 }
 
+/// State of the handshake state machine.
+/// 
+/// The handshake progresses through several states depending on the role:
+/// - `InitiatorState`: Active state for the connection initiator
+/// - `ResponderState`: Active state for the connection responder
+/// - `Established`: Terminal success state with secure context
+/// - `Failed`: Terminal error state with reason
 pub type HandshakeState {
   InitiatorState(
     state: provider.ProviderState,
@@ -34,12 +49,19 @@ pub type HandshakeState {
   Failed(String)
 }
 
+/// Result of processing a handshake message.
+/// 
+/// - `Sent`: Produced an outgoing message and new state
+/// - `Received`: Processed incoming message, optionally with reply
 pub type Outcome {
   Sent(BitArray, HandshakeState)
   Received(Option(BitArray), HandshakeState)
 }
 
-// Start initiator: produce Hello and new state
+/// Start the handshake as initiator.
+/// 
+/// Produces the initial Hello message to send to the responder
+/// and returns the new initiator state.
 pub fn initiator_start(local: handshake.Hello) -> #(BitArray, HandshakeState) {
   let state = provider_stub.init()
   let hello_b = handshake.encode_hello(local)
@@ -60,12 +82,18 @@ pub fn initiator_start(local: handshake.Hello) -> #(BitArray, HandshakeState) {
   }
 }
 
-// Responder initial state
+/// Initialize the responder state.
+/// 
+/// Creates a fresh responder state ready to receive a Hello message
+/// from the initiator.
 pub fn responder_init() -> HandshakeState {
   ResponderState(provider_stub.init(), None, None, None, 0, None)
 }
 
-// Handle incoming message as responder; return optional outgoing message and new state
+/// Handle an incoming message as the responder.
+/// 
+/// Processes Hello, Accept, or KeyExchange messages and returns
+/// the appropriate Outcome with optional outgoing message and new state.
 pub fn responder_handle_message(
   state: HandshakeState,
   data: BitArray,
@@ -172,7 +200,10 @@ pub fn responder_handle_message(
   }
 }
 
-// Handle incoming message as initiator
+/// Handle an incoming message as the initiator.
+/// 
+/// Processes Capabilities, Reject, or KeyExchange messages and returns
+/// the appropriate Outcome with optional outgoing message and new state.
 pub fn initiator_handle_message(
   state: HandshakeState,
   data: BitArray,
@@ -294,7 +325,10 @@ pub fn initiator_handle_message(
   }
 }
 
-// Handle timeout (external trigger) — retransmit or fail
+/// Handle a timeout during handshake.
+/// 
+/// Either retransmits the pending message if retries remain,
+/// or transitions to Failed state if max retries exceeded.
 pub fn handshake_on_timeout(state: HandshakeState) -> Result(Outcome, String) {
   let max_accept_retries = 3
   let max_ke_retries = 3

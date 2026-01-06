@@ -2,6 +2,7 @@ import distribute/crypto/provider as crypto_provider
 import distribute/codec
 import gleam/bit_array
 import gleam/option.{type Option}
+import gleam/result
 
 pub type Capability {
   Capability(
@@ -87,121 +88,70 @@ pub fn unwrap_envelope(
 // Pair encoder/decoder for `#(String, String)` used in metadata lists.
 fn pair_encoder() -> codec.Encoder(#(String, String)) {
   fn(pair: #(String, String)) {
-    case pair {
-      #(a, b) ->
-        case codec.encode(codec.string_encoder(), a) {
-          Ok(a_bytes) ->
-            case codec.encode(codec.string_encoder(), b) {
-              Ok(b_bytes) -> Ok(bit_array.append(a_bytes, b_bytes))
-              Error(e) -> Error(e)
-            }
-          Error(e) -> Error(e)
-        }
-    }
+    let #(a, b) = pair
+    use a_bytes <- result.try(codec.encode(codec.string_encoder(), a))
+    use b_bytes <- result.try(codec.encode(codec.string_encoder(), b))
+    Ok(bit_array.append(a_bytes, b_bytes))
   }
 }
 
 fn pair_sized_decoder() -> codec.SizedDecoder(#(String, String)) {
   fn(data) {
-    case codec.string_sized_decoder()(data) {
-      Ok(#(a, rest)) ->
-        case codec.string_sized_decoder()(rest) {
-          Ok(#(b, rest2)) -> Ok(#(#(a, b), rest2))
-          Error(e) -> Error(e)
-        }
-      Error(e) -> Error(e)
-    }
+    use #(a, rest) <- result.try(codec.string_sized_decoder()(data))
+    use #(b, rest2) <- result.try(codec.string_sized_decoder()(rest))
+    Ok(#(#(a, b), rest2))
   }
 }
 
 // Capability encoder/decoder
 pub fn capability_encoder() -> codec.Encoder(Capability) {
   fn(c: Capability) {
-    // meta: list of pairs
     let meta_enc = codec.list_encoder(pair_encoder())
-    case codec.encode(codec.string_encoder(), c.protocol) {
-      Ok(proto) ->
-        case codec.encode(codec.int_encoder(), c.min) {
-          Ok(min_b) ->
-            case codec.encode(codec.int_encoder(), c.max) {
-              Ok(max_b) ->
-                case codec.encode(meta_enc, c.meta) {
-                  Ok(meta_b) ->
-                    Ok(bit_array.append(
-                      proto,
-                      bit_array.append(min_b, bit_array.append(max_b, meta_b)),
-                    ))
-                  Error(e) -> Error(e)
-                }
-              Error(e) -> Error(e)
-            }
-          Error(e) -> Error(e)
-        }
-      Error(e) -> Error(e)
-    }
+    use proto <- result.try(codec.encode(codec.string_encoder(), c.protocol))
+    use min_b <- result.try(codec.encode(codec.int_encoder(), c.min))
+    use max_b <- result.try(codec.encode(codec.int_encoder(), c.max))
+    use meta_b <- result.try(codec.encode(meta_enc, c.meta))
+    Ok(bit_array.append(
+      proto,
+      bit_array.append(min_b, bit_array.append(max_b, meta_b)),
+    ))
   }
 }
 
 pub fn capability_sized_decoder() -> codec.SizedDecoder(Capability) {
   fn(data: BitArray) {
-    case codec.string_sized_decoder()(data) {
-      Ok(#(protocol, rest1)) ->
-        case codec.int_sized_decoder()(rest1) {
-          Ok(#(min, rest2)) ->
-            case codec.int_sized_decoder()(rest2) {
-              Ok(#(max, rest3)) ->
-                case codec.list_sized_decoder(pair_sized_decoder())(rest3) {
-                  Ok(#(meta, rest4)) ->
-                    Ok(#(Capability(protocol, min, max, meta), rest4))
-                  Error(e) -> Error(e)
-                }
-              Error(e) -> Error(e)
-            }
-          Error(e) -> Error(e)
-        }
-      Error(e) -> Error(e)
-    }
+    use #(protocol, rest1) <- result.try(codec.string_sized_decoder()(data))
+    use #(min, rest2) <- result.try(codec.int_sized_decoder()(rest1))
+    use #(max, rest3) <- result.try(codec.int_sized_decoder()(rest2))
+    use #(meta, rest4) <- result.try(
+      codec.list_sized_decoder(pair_sized_decoder())(rest3),
+    )
+    Ok(#(Capability(protocol, min, max, meta), rest4))
   }
 }
 
 // Hello encoder/decoder
 pub fn hello_encoder() -> codec.Encoder(Hello) {
   fn(h: Hello) {
-    // node_info: list of pairs
     let info_enc = codec.list_encoder(pair_encoder())
-    // capabilities: list of Capability
     let cap_enc = codec.list_encoder(capability_encoder())
-    case codec.encode(codec.string_encoder(), h.node_id) {
-      Ok(id_b) ->
-        case codec.encode(info_enc, h.node_info) {
-          Ok(info_b) ->
-            case codec.encode(cap_enc, h.capabilities) {
-              Ok(caps_b) ->
-                Ok(bit_array.append(id_b, bit_array.append(info_b, caps_b)))
-              Error(e) -> Error(e)
-            }
-          Error(e) -> Error(e)
-        }
-      Error(e) -> Error(e)
-    }
+    use id_b <- result.try(codec.encode(codec.string_encoder(), h.node_id))
+    use info_b <- result.try(codec.encode(info_enc, h.node_info))
+    use caps_b <- result.try(codec.encode(cap_enc, h.capabilities))
+    Ok(bit_array.append(id_b, bit_array.append(info_b, caps_b)))
   }
 }
 
 pub fn hello_sized_decoder() -> codec.SizedDecoder(Hello) {
   fn(data: BitArray) {
-    case codec.string_sized_decoder()(data) {
-      Ok(#(node_id, rest1)) ->
-        case codec.list_sized_decoder(pair_sized_decoder())(rest1) {
-          Ok(#(node_info, rest2)) ->
-            case codec.list_sized_decoder(capability_sized_decoder())(rest2) {
-              Ok(#(capabilities, rest3)) ->
-                Ok(#(Hello(node_id, node_info, capabilities), rest3))
-              Error(e) -> Error(e)
-            }
-          Error(e) -> Error(e)
-        }
-      Error(e) -> Error(e)
-    }
+    use #(node_id, rest1) <- result.try(codec.string_sized_decoder()(data))
+    use #(node_info, rest2) <- result.try(
+      codec.list_sized_decoder(pair_sized_decoder())(rest1),
+    )
+    use #(capabilities, rest3) <- result.try(
+      codec.list_sized_decoder(capability_sized_decoder())(rest2),
+    )
+    Ok(#(Hello(node_id, node_info, capabilities), rest3))
   }
 }
 
@@ -215,10 +165,10 @@ pub fn capabilities_encoder() -> codec.Encoder(CapabilitiesMsg) {
 
 pub fn capabilities_sized_decoder() -> codec.SizedDecoder(CapabilitiesMsg) {
   fn(data: BitArray) {
-    case codec.list_sized_decoder(capability_sized_decoder())(data) {
-      Ok(#(caps, rest)) -> Ok(#(CapabilitiesMsg(caps), rest))
-      Error(e) -> Error(e)
-    }
+    use #(caps, rest) <- result.try(
+      codec.list_sized_decoder(capability_sized_decoder())(data),
+    )
+    Ok(#(CapabilitiesMsg(caps), rest))
   }
 }
 
@@ -226,36 +176,21 @@ pub fn capabilities_sized_decoder() -> codec.SizedDecoder(CapabilitiesMsg) {
 pub fn accept_encoder() -> codec.Encoder(Accept) {
   fn(a: Accept) {
     let params_enc = codec.list_encoder(pair_encoder())
-    case codec.encode(codec.string_encoder(), a.protocol) {
-      Ok(p) ->
-        case codec.encode(codec.int_encoder(), a.version) {
-          Ok(vb) ->
-            case codec.encode(params_enc, a.params) {
-              Ok(pb) -> Ok(bit_array.append(p, bit_array.append(vb, pb)))
-              Error(e) -> Error(e)
-            }
-          Error(e) -> Error(e)
-        }
-      Error(e) -> Error(e)
-    }
+    use p <- result.try(codec.encode(codec.string_encoder(), a.protocol))
+    use vb <- result.try(codec.encode(codec.int_encoder(), a.version))
+    use pb <- result.try(codec.encode(params_enc, a.params))
+    Ok(bit_array.append(p, bit_array.append(vb, pb)))
   }
 }
 
 pub fn accept_sized_decoder() -> codec.SizedDecoder(Accept) {
   fn(data: BitArray) {
-    case codec.string_sized_decoder()(data) {
-      Ok(#(protocol, rest1)) ->
-        case codec.int_sized_decoder()(rest1) {
-          Ok(#(version, rest2)) ->
-            case codec.list_sized_decoder(pair_sized_decoder())(rest2) {
-              Ok(#(params, rest3)) ->
-                Ok(#(Accept(protocol, version, params), rest3))
-              Error(e) -> Error(e)
-            }
-          Error(e) -> Error(e)
-        }
-      Error(e) -> Error(e)
-    }
+    use #(protocol, rest1) <- result.try(codec.string_sized_decoder()(data))
+    use #(version, rest2) <- result.try(codec.int_sized_decoder()(rest1))
+    use #(params, rest3) <- result.try(
+      codec.list_sized_decoder(pair_sized_decoder())(rest2),
+    )
+    Ok(#(Accept(protocol, version, params), rest3))
   }
 }
 
@@ -265,10 +200,8 @@ pub fn reject_encoder() -> codec.Encoder(Reject) {
 
 pub fn reject_sized_decoder() -> codec.SizedDecoder(Reject) {
   fn(data: BitArray) {
-    case codec.string_sized_decoder()(data) {
-      Ok(#(reason, rest)) -> Ok(#(Reject(reason), rest))
-      Error(e) -> Error(e)
-    }
+    use #(reason, rest) <- result.try(codec.string_sized_decoder()(data))
+    Ok(#(Reject(reason), rest))
   }
 }
 
@@ -278,10 +211,8 @@ pub fn keyexchange_encoder() -> codec.Encoder(KeyExchangeMsg) {
 
 pub fn keyexchange_sized_decoder() -> codec.SizedDecoder(KeyExchangeMsg) {
   fn(data: BitArray) {
-    case codec.bitarray_sized_decoder()(data) {
-      Ok(#(payload, rest)) -> Ok(#(KeyExchangeMsg(payload), rest))
-      Error(e) -> Error(e)
-    }
+    use #(payload, rest) <- result.try(codec.bitarray_sized_decoder()(data))
+    Ok(#(KeyExchangeMsg(payload), rest))
   }
 }
 

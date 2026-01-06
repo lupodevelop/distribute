@@ -6,8 +6,8 @@ import distribute/settings
 import gleam/list
 import gleam/option
 
-// Dynamic type used for ad-hoc FFI returns
-type Dynamic
+// Dynamic type for FFI interop
+import gleam/dynamic.{type Dynamic}
 
 import gleam/string
 

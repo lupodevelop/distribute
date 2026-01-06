@@ -5,7 +5,6 @@
 /// - Name-based actor lookup
 /// - Registry integration with supervision
 /// - Global actor discovery across nodes
-
 import distribute/actor
 import distribute/codec
 import distribute/global
@@ -46,7 +45,9 @@ type ServiceState {
   ServiceState(name: String, requests: Int)
 }
 
-fn service_init(name: String) -> otp_actor.InitResult(ServiceState, ServiceMessage) {
+fn service_init(
+  name: String,
+) -> otp_actor.InitResult(ServiceState, ServiceMessage) {
   let selector = process.new_selector()
   otp_actor.Ready(ServiceState(name, 0), selector)
 }
@@ -59,10 +60,7 @@ fn service_loop(
     Request(data, reply) -> {
       let response = state.name <> " processed: " <> data
       process.send(reply, response)
-      otp_actor.continue(ServiceState(
-        ..state,
-        requests: state.requests + 1,
-      ))
+      otp_actor.continue(ServiceState(..state, requests: state.requests + 1))
     }
     Health(reply) -> {
       process.send(reply, True)
@@ -91,7 +89,12 @@ pub fn example_manual_registration() {
       io.println("✓ Actor started")
 
       // Step 2: Register manually
-      case registry.register_typed("manual-service", global.subject(service_subject)) {
+      case
+        registry.register_typed(
+          "manual-service",
+          global.subject(service_subject),
+        )
+      {
         Ok(_) -> {
           io.println("✓ Actor registered as 'manual-service'")
 
@@ -140,8 +143,7 @@ pub fn example_convenience_registration() {
         Error(_) -> io.println("✗ Lookup failed")
       }
     }
-    Error(registry.AlreadyRegistered) ->
-      io.println("✗ Name already taken")
+    Error(registry.AlreadyRegistered) -> io.println("✗ Name already taken")
     Error(_) -> io.println("✗ Registration failed")
   }
 }
@@ -166,7 +168,12 @@ pub fn example_supervised_registered() {
       io.println("✓ Actor started under supervision")
 
       // Register after supervision is confirmed
-      case registry.register_typed("supervised-service", global.subject(service_subject)) {
+      case
+        registry.register_typed(
+          "supervised-service",
+          global.subject(service_subject),
+        )
+      {
         Ok(_) -> {
           io.println("✓ Supervised actor registered")
 

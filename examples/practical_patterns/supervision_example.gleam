@@ -5,7 +5,6 @@
 /// - Worker pools with restart strategies
 /// - Nested supervision trees
 /// - Named actor registration under supervision
-
 import distribute/actor
 import distribute/codec
 import distribute/global
@@ -35,10 +34,7 @@ fn worker_encoder() -> codec.Encoder(WorkerMessage) {
   fn(msg) {
     case msg {
       DoWork(id, _reply) ->
-        codec.encode(codec.tuple2(codec.int(), codec.string()), #(
-          id,
-          "do_work",
-        ))
+        codec.encode(codec.tuple2(codec.int(), codec.string()), #(id, "do_work"))
       GetStatus(_reply) -> codec.encode(codec.string(), "get_status")
     }
   }
@@ -126,9 +122,9 @@ pub fn example_single_supervised() {
 
   case result {
     Ok(#(supervisor_pid, worker_subject)) -> {
-      io.println("✓ Supervisor started with PID: " <> pid_to_string(
-        supervisor_pid,
-      ))
+      io.println(
+        "✓ Supervisor started with PID: " <> pid_to_string(supervisor_pid),
+      )
       io.println("✓ Worker started and supervised")
 
       // Use the worker
@@ -162,7 +158,9 @@ pub fn example_worker_pool() {
   case result {
     Ok(#(pool_supervisor, workers)) -> {
       io.println(
-        "✓ Worker pool started with " <> int_to_string(list_length(workers)) <> " workers",
+        "✓ Worker pool started with "
+        <> int_to_string(list_length(workers))
+        <> " workers",
       )
 
       // Send work to all workers
@@ -170,9 +168,8 @@ pub fn example_worker_pool() {
         let reply = process.new_subject()
         global.send(worker, DoWork(idx, reply))
         case process.receive(reply, 1000) {
-          Ok(Ok(result)) -> io.println("  Worker " <> int_to_string(
-            idx,
-          ) <> ": " <> result)
+          Ok(Ok(result)) ->
+            io.println("  Worker " <> int_to_string(idx) <> ": " <> result)
           _ -> Nil
         }
       })
