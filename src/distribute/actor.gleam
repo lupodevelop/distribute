@@ -108,10 +108,12 @@
 import distribute/codec.{type Decoder, type Encoder}
 import distribute/global
 import distribute/receiver
+import distribute/registry as registry
 import distribute/log
-import gleam/erlang/process.{type Subject}
+import gleam/erlang/process
 import gleam/otp/actor
 import gleam/otp/supervision.{type ChildSpecification, worker}
+import gleam/result as result
 
 /// Errors that can occur when starting an actor.
 pub type ActorError {
@@ -256,7 +258,7 @@ pub fn start(
   initial_state: state,
   decoder: Decoder(msg),
   handler: fn(msg, state) -> receiver.Next(state),
-) -> Result(Subject(BitArray), actor.StartError) {
+) -> Result(process.Subject(BitArray), actor.StartError) {
   log.warn(
     "actor.start is deprecated and will be removed in v3.0.0; use actor.start_typed_actor(...) instead",
     [#("replacement", "actor.start_typed_actor")],
@@ -286,7 +288,7 @@ pub fn start_global(
   initial_state: state,
   decoder: Decoder(msg),
   handler: fn(msg, state) -> receiver.Next(state),
-) -> Subject(BitArray) {
+) -> process.Subject(BitArray) {
   log.warn(
     "actor.start_global is deprecated and will be removed in v3.0.0; use actor.start_typed_actor(...) and registry.register_typed(...) instead",
     [#("replacement", "actor.start_typed_actor")],
@@ -334,7 +336,7 @@ pub fn child_spec_typed_actor(
   initial_state: state,
   decoder: Decoder(msg),
   handler: fn(msg, state) -> receiver.Next(state),
-) -> ChildSpecification(Subject(BitArray)) {
+) -> ChildSpecification(process.Subject(BitArray)) {
   worker(fn() {
     actor.new(initial_state)
     |> actor.on_message(fn(state, binary: BitArray) {
@@ -374,6 +376,70 @@ pub fn child_spec_server(
   initial_state: state,
   decoder: Decoder(request),
   handler: fn(request, state) -> receiver.Next(state),
-) -> ChildSpecification(Subject(BitArray)) {
+) -> ChildSpecification(process.Subject(BitArray)) {
   child_spec_typed_actor(initial_state, decoder, handler)
+}
+
+/// Start and register a typed actor under a global name.
+/// 
+/// This helper starts a typed actor and registers its subject with
+/// `registry.register_typed(name, subject)`. Returns `Ok(GlobalSubject(msg))`
+/// on success or `Error(RegisterError)` if registration fails.
+///
+/// Note: If registration fails, the started actor process will continue running.
+/// The caller is responsible for cleanup in error cases if needed.
+pub fn start_typed_actor_registered(
+  name: String,
+  initial_state: state,
+  encoder: Encoder(msg),
+  decoder: Decoder(msg),
+  handler: fn(msg, state) -> receiver.Next(state),
+) -> Result(global.GlobalSubject(msg), registry.RegisterError) {
+  let gs = start_typed_actor(initial_state, encoder, decoder, handler)
+  case registry.register_typed(name, global.subject(gs)) {
+    Ok(_) -> Ok(gs)
+    Error(err) -> Error(err)
+  }
+}
+
+/// Start a typed actor via the OTP actor API and return the full Started
+/// result with `GlobalSubject(msg)` as the returned data. This is useful
+/// for supervision integration where the caller needs access to the pid.
+pub fn start_typed_actor_started(
+  initial_state: state,
+  encoder: Encoder(msg),
+  decoder: Decoder(msg),
+  handler: fn(msg, state) -> receiver.Next(state),
+) -> Result(actor.Started(global.GlobalSubject(msg)), actor.StartError) {
+  actor.new(initial_state)
+  |> actor.on_message(fn(state, binary: BitArray) {
+    case decoder(binary) {
+      Ok(message) -> {
+        case handler(message, state) {
+          receiver.Continue(new_state) -> actor.continue(new_state)
+          receiver.Stop -> actor.stop()
+          receiver.StopAbnormal(reason) -> actor.stop_abnormal(reason)
+        }
+      }
+      Error(_) -> actor.continue(state)
+    }
+  })
+  |> actor.start()
+  |> result.map(fn(started) {
+    let subject = started.data
+    let global_subject = global.from_subject(subject, encoder, decoder)
+    actor.Started(pid: started.pid, data: global_subject)
+  })
+}
+
+/// Create a typed child spec that returns `GlobalSubject(msg)` as the child data.
+/// This helper is supervision-friendly and returns a `ChildSpecification` with
+/// the typed data so supervisors can access the typed subject directly.
+pub fn child_spec_typed_actor_typed(
+  initial_state: state,
+  encoder: Encoder(msg),
+  decoder: Decoder(msg),
+  handler: fn(msg, state) -> receiver.Next(state),
+) -> ChildSpecification(global.GlobalSubject(msg)) {
+  worker(fn() { start_typed_actor_started(initial_state, encoder, decoder, handler) })
 }
