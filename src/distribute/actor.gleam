@@ -108,6 +108,7 @@
 import distribute/codec.{type Decoder, type Encoder}
 import distribute/global
 import distribute/receiver
+import distribute/log
 import gleam/erlang/process.{type Subject}
 import gleam/otp/actor
 import gleam/otp/supervision.{type ChildSpecification, worker}
@@ -250,11 +251,16 @@ pub fn start_server(
 /// ## Returns
 ///
 /// `Ok(Subject(BitArray))` on success, `Error(StartFailed(err))` on failure.
+@deprecated("Use start_typed_actor instead; will be removed in v3.0.0")
 pub fn start(
   initial_state: state,
   decoder: Decoder(msg),
   handler: fn(msg, state) -> receiver.Next(state),
 ) -> Result(Subject(BitArray), actor.StartError) {
+  log.warn(
+    "actor.start is deprecated and will be removed in v3.0.0; use actor.start_typed_actor(...) instead",
+    [#("replacement", "actor.start_typed_actor")],
+  )
   receiver.start_typed_receiver(initial_state, decoder, handler)
 }
 
@@ -275,11 +281,16 @@ pub fn start(
 /// ## Returns
 ///
 /// A `Subject(BitArray)` with a `Nil` tag for global use.
+@deprecated("Use start_typed_actor instead; will be removed in v3.0.0")
 pub fn start_global(
   initial_state: state,
   decoder: Decoder(msg),
   handler: fn(msg, state) -> receiver.Next(state),
 ) -> Subject(BitArray) {
+  log.warn(
+    "actor.start_global is deprecated and will be removed in v3.0.0; use actor.start_typed_actor(...) and registry.register_typed(...) instead",
+    [#("replacement", "actor.start_typed_actor")],
+  )
   receiver.start_global_receiver(initial_state, decoder, handler)
 }
 

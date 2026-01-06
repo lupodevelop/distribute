@@ -11,8 +11,11 @@ import distribute/actor
 import distribute/codec
 import distribute/global
 import distribute/receiver
+import distribute/log as log
 import gleam/erlang/process
 import gleeunit/should
+import gleam/option as option
+import gleam/string
 
 // Test message types
 pub type CounterMsg {
@@ -320,6 +323,32 @@ pub fn child_spec_server_creates_spec_test() {
   should.be_true(True)
 }
 
+pub fn deprecated_start_logs_warning_test() {
+  // Ensure deprecation warning is logged when using legacy start()
+  log.clear_last_log_entry_for_test()
+  log.enable_logging()
+  let _ = actor.start(0, counter_decoder(), fn(msg, count) { receiver.Continue(count) })
+  process.sleep(10)
+  log.disable_logging()
+  case log.last_log_entry_for_test() {
+    option.Some(entry) -> should.be_true(string.contains(entry, "actor.start is deprecated"))
+    option.None -> should.fail()
+  }
+}
+
+pub fn deprecated_start_global_logs_warning_test() {
+  // Ensure deprecation warning is logged when using legacy start_global()
+  log.clear_last_log_entry_for_test()
+  log.enable_logging()
+  let _ = actor.start_global(0, counter_decoder(), fn(msg, count) { receiver.Continue(count) })
+  process.sleep(10)
+  log.disable_logging()
+  case log.last_log_entry_for_test() {
+    option.Some(entry) -> should.be_true(string.contains(entry, "actor.start_global is deprecated"))
+    option.None -> should.fail()
+  }
+}
+
 pub fn start_and_start_global_compatibility_test() {
   // Test that start() and start_global() still work (legacy API)
   let result1 =
@@ -355,3 +384,4 @@ pub fn start_and_start_global_compatibility_test() {
   process.send(subject2, <<0>>)
   process.sleep(20)
 }
+
