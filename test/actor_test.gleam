@@ -11,8 +11,11 @@ import distribute/actor
 import distribute/codec
 import distribute/global
 import distribute/receiver
+import distribute/registry
+import distribute/settings
 import distribute/log as log
 import gleam/erlang/process
+import gleam/otp/static_supervisor
 import gleeunit/should
 import gleam/option as option
 import gleam/string
@@ -383,5 +386,30 @@ pub fn start_and_start_global_compatibility_test() {
   // We verify it's usable by sending a raw BitArray message
   process.send(subject2, <<0>>)
   process.sleep(20)
+}
+
+pub fn start_typed_actor_registered_test() {
+  settings.set_allow_atom_creation(True)
+  let name = "test_actor_reg_" <> log.generate_correlation_id()
+  let res = actor.start_typed_actor_registered(name, 0, counter_encoder(), counter_decoder(), fn(_msg, count) { receiver.Continue(count) })
+  should.be_ok(res)
+  // Cleanup - unregister the actor
+  let _ = registry.unregister(name)
+  Nil
+}
+
+pub fn start_typed_actor_started_test() {
+  let res = actor.start_typed_actor_started(0, counter_encoder(), counter_decoder(), fn(_msg, count) { receiver.Continue(count) })
+  should.be_ok(res)
+  Nil
+}
+
+pub fn child_spec_typed_actor_typed_test() {
+  let child = actor.child_spec_typed_actor_typed(0, counter_encoder(), counter_decoder(), fn(_msg, count) { receiver.Continue(count) })
+  let builder = static_supervisor.new(static_supervisor.OneForOne)
+  let builder = static_supervisor.add(builder, child)
+  let result = static_supervisor.start(builder)
+  should.be_ok(result)
+  Nil
 }
 
