@@ -182,9 +182,9 @@ pub fn start_supervised() -> Result(
       handle_message,
     )
   {
-    Ok(#(sup, coordinator)) -> {
+    Ok(#(sup_pid, coordinator)) -> {
       io.println("✓ SWIM Coordinator started under supervision")
-      Ok(#(sup.pid, coordinator))
+      Ok(#(sup_pid, coordinator))
     }
     Error(err) -> Error(actor.StartFailed(err))
   }

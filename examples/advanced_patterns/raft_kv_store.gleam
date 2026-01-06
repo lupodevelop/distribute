@@ -236,13 +236,13 @@ pub fn start_with_pool(
       handle_message,
     )
   {
-    Ok(#(sup, workers)) -> {
+    Ok(#(sup_pid, workers)) -> {
       io.println(
         "✓ KV Store pool started with "
         <> string.inspect(pool_size)
         <> " workers",
       )
-      Ok(#(sup.pid, workers))
+      Ok(#(sup_pid, workers))
     }
     Error(err) -> Error(actor.StartFailed(err))
   }
