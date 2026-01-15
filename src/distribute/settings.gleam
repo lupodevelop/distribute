@@ -2,7 +2,6 @@
 /// 
 /// These settings control global behavior of the library, particularly
 /// around security-sensitive operations like atom creation.
-
 @external(erlang, "settings_ffi", "set_allow_atom_creation")
 fn set_allow_atom_creation_ffi(b: Bool) -> a
 

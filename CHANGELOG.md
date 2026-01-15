@@ -4,6 +4,15 @@ All notable changes for major releases of the project.
 
 ---
 
+## v2.1.1 — 2026-01-15
+
+**Bugfix:** Fix global receiver EXIT handling and tests
+
+### Bugfixes
+- **Receiver**: Properly handle linked process EXIT messages in the global receiver. The receiver now calls `process.trap_exits(True)` and uses `select_trapped_exits` to receive EXIT messages through the selector, logging and terminating gracefully for both normal and abnormal exits. Added unit tests to verify behavior for Normal and Abnormal exits. No breaking changes.
+
+---
+
 ## v2.1.0 — 2025-01-05
 
 **Author:** lupodevelop — Scaratti Daniele
@@ -36,6 +45,7 @@ This release introduces **capability negotiation** and **protocol versioning** a
   - **NEW**: Added high-level supervision helpers:
     - `actor.start_typed_actor_supervised(...)` — starts actor under supervisor in one call, returns `(Pid, GlobalSubject(msg))`
     - `actor.pool_supervisor(pool_size, ...)` — creates N worker actors under supervisor for load balancing and parallel processing
+  - **FIX**: `receiver` global-loop EXIT handling — `start_global_receiver` now enables `process.trap_exits(True)` and the internal loop uses `select_trapped_exits` so linked process EXIT messages are received and handled gracefully; added unit tests (`start_global_receiver_handles_abnormal_exit_test`, `start_global_receiver_handles_normal_exit_test`) to validate behavior.
   - Marked legacy low-level APIs as **deprecated** and added migration guidance in `MIGRATION.md`.  
   - Updated documentation and tests to cover typed actors and supervision integration; test suite updated to include child-spec creation checks.
   - Added advanced examples demonstrating SWIM and Raft integration patterns (see `examples/advanced_patterns/`)

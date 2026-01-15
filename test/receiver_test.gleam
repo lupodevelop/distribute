@@ -188,3 +188,39 @@ pub fn start_typed_actor_stop_test() {
   process.sleep(50)
   // Actor should be stopped now (we can't easily test this without monitoring)
 }
+
+pub fn start_global_receiver_handles_abnormal_exit_test() {
+  // Start a receiver that will simply continue on messages
+  let decoder = codec.string_decoder()
+
+  let subject =
+    receiver.start_global_receiver(Nil, decoder, fn(_msg, state) {
+      receiver.Continue(state)
+    })
+
+  // Extract the receiver PID and have a helper process send an abnormal exit signal
+  let assert Ok(pid) = process.subject_owner(subject)
+  let _ = process.spawn(fn() { process.send_abnormal_exit(pid, "boom") })
+  process.sleep(50)
+
+  // Receiver should have stopped after handling the exit
+  should.be_false(process.is_alive(pid))
+}
+
+pub fn start_global_receiver_handles_normal_exit_test() {
+  // Start a receiver that will simply continue on messages
+  let decoder = codec.string_decoder()
+
+  let subject =
+    receiver.start_global_receiver(Nil, decoder, fn(_msg, state) {
+      receiver.Continue(state)
+    })
+
+  // Extract the receiver PID and have a helper process send a normal exit signal
+  let assert Ok(pid) = process.subject_owner(subject)
+  let _ = process.spawn(fn() { process.send_exit(pid) })
+  process.sleep(50)
+
+  // Receiver should have stopped after handling the exit
+  should.be_false(process.is_alive(pid))
+}

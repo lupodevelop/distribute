@@ -58,7 +58,10 @@ pub fn start() -> Result(process.Subject(RegistryCommand), actor.StartError) {
 ///
 /// Useful for OTP supervision where the supervisor expects a start
 /// function that returns `Result(actor.Started(data), actor.StartError)`.
-pub fn start_link() -> Result(actor.Started(process.Subject(RegistryCommand)), actor.StartError) {
+pub fn start_link() -> Result(
+  actor.Started(process.Subject(RegistryCommand)),
+  actor.StartError,
+) {
   actor.new([])
   |> actor.on_message(fn(state, msg) {
     case state, msg {

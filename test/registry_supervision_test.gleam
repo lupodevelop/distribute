@@ -1,10 +1,9 @@
-
 import distribute/registry/actor
-import distribute/registry/behaviour as behaviour
-import gleam/otp/static_supervisor
-import gleam/otp/supervision as supervision
-import gleam/otp/actor as otp_actor
+import distribute/registry/behaviour
 import gleam/erlang/process
+import gleam/otp/actor as otp_actor
+import gleam/otp/static_supervisor
+import gleam/otp/supervision
 
 /// Ensure registry can be started under a supervisor and is usable.
 pub fn registry_supervised_start_test() {
@@ -40,7 +39,8 @@ pub fn registry_supervision_child_start_failure_test() {
       Nil
     })
 
-  let selector = process.new_selector() |> process.select_map(reply, fn(x) { x })
+  let selector =
+    process.new_selector() |> process.select_map(reply, fn(x) { x })
   case process.selector_receive(selector, 1000) {
     Ok(result) -> {
       let assert Error(_) = result

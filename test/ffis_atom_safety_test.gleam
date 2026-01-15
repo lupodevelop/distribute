@@ -1,10 +1,10 @@
-import gleeunit
-import gleeunit/should
 import distribute/groups
 import distribute/log
 import distribute/registry
 import distribute/settings
 import gleam/erlang/process.{type Pid}
+import gleeunit
+import gleeunit/should
 
 @external(erlang, "erlang", "self")
 fn groups_self_ffi() -> Pid

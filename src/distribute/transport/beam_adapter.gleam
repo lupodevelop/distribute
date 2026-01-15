@@ -186,11 +186,11 @@ fn start_link(
     Ok(started) -> {
       // Register the process with the configured name
       let _ = register_process_by_name(started.pid, options.name)
-      
+
       // Store the Subject in registry for later retrieval
       let subject = started.data
       let _ = registry.store_subject(options.name, subject)
-      
+
       let handle = types.new_handle(options.name, wrap_subject(subject))
       // Return Started with handle as data
       Ok(actor.Started(pid: started.pid, data: handle))

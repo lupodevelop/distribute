@@ -63,7 +63,12 @@ pub type CryptoAdapter {
     shutdown: fn(ProviderHandle) -> Result(Nil, CryptoError),
     /// Start a handshake with a remote node.
     /// Returns initial handshake state and optional first message to send.
-    handshake_start: fn(ProviderHandle, NodeId, NodeId, Option(HandshakeMessage)) ->
+    handshake_start: fn(
+      ProviderHandle,
+      NodeId,
+      NodeId,
+      Option(HandshakeMessage),
+    ) ->
       Result(HandshakeResult, CryptoError),
     /// Continue an in-progress handshake with an incoming message.
     /// Returns updated state, established context, or error.
@@ -118,7 +123,6 @@ pub fn development_options(name: String) -> ProviderOptions {
     custom: dict.new(),
   )
 }
-
 // =============================================================================
 // Implementation Notes
 // =============================================================================

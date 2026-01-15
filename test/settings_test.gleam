@@ -1,6 +1,6 @@
+import distribute/settings
 import gleeunit
 import gleeunit/should
-import distribute/settings
 
 pub fn main() -> Nil {
   gleeunit.main()

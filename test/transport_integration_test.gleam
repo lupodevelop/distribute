@@ -23,14 +23,14 @@ pub fn main() {
 fn start_transport() -> process.Pid {
   // We use a supervisor to start the child_spec, mimicking the real app
   let worker = transport.child_spec()
-  let assert Ok(sup) = 
+  let assert Ok(sup) =
     supervisor.new(supervisor.OneForOne)
     |> supervisor.add(worker)
     |> supervisor.start()
-  
+
   // Give the process time to register
   process.sleep(50)
-  
+
   sup.pid
 }
 
@@ -42,17 +42,17 @@ fn stop_transport(pid: process.Pid) {
 // Test 1: transport.send via singleton
 pub fn transport_singleton_send_test() {
   let sup = start_transport()
-  
+
   let probe = process.new_subject()
   let name = "transport_singleton_test"
   let _pid = start_receiver(name, probe)
 
   let payload = <<"singleton test">>
   let opts = adapter.default_send_options()
-  
+
   // Send using the facade
   let result = transport.send(name, payload, opts)
-  
+
   result
   |> should.be_ok
 
@@ -84,7 +84,7 @@ pub fn messaging_integration_test() {
 
   // Verify receipt (raw binary)
   let assert Ok(received_binary) = process.receive(probe, 1000)
-  
+
   // Decode to verify content
   let assert Ok(decoded) = codec.decode(codec.string_decoder(), received_binary)
   decoded
@@ -99,7 +99,7 @@ pub fn transport_health_test() {
   let sup = start_transport()
 
   let status = transport.health()
-  
+
   case status {
     types.Up -> should.be_true(True)
     _ -> should.fail()

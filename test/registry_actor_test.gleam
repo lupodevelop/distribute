@@ -1,7 +1,6 @@
 /// Tests for the registry actor public API wrappers.
-
 import distribute/registry/actor
-import distribute/registry/behaviour as behaviour
+import distribute/registry/behaviour
 import gleam/list
 import gleeunit/should
 

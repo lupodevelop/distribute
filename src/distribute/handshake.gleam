@@ -1,5 +1,5 @@
-import distribute/crypto/provider as crypto_provider
 import distribute/codec
+import distribute/crypto/provider as crypto_provider
 import gleam/bit_array
 import gleam/option.{type Option}
 import gleam/result

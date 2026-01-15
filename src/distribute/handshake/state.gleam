@@ -13,7 +13,6 @@ import gleam/option.{type Option, None, Some}
 /// - Protocol/version negotiation
 /// - Key exchange for establishing secure contexts
 /// - Retry logic for transient failures
-
 /// Role in the handshake - determines which state machine path to follow.
 pub type Role {
   Initiator
