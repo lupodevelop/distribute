@@ -6,6 +6,9 @@
          store_subject/2, get_subject/1, remove_subject/1,
          is_ok_tuple/1, extract_subject/1, millisecond_atom/0]).
 
+%% Import shared utility for safe atom conversion
+-import(distribute_ffi_utils, [to_atom_safe/1]).
+
 make_subject(Pid, Tag) -> {subject, Pid, Tag}.
 
 register(Name, Pid) ->
@@ -60,20 +63,6 @@ get_error_reason(_) -> <<"unknown_error">>.
 is_pid(Value) -> erlang:is_pid(Value).
 
 dynamic_to_pid(Pid) -> Pid.
-
-%% Internal helpers
-to_atom_safe(Bin) when is_list(Bin) -> to_atom_safe(list_to_binary(Bin));
-to_atom_safe(Bin) when is_binary(Bin) -> 
-    Allow = persistent_term:get(distribute_allow_atom_creation, false),
-    case catch binary_to_existing_atom(Bin, utf8) of
-        {'EXIT', _} -> case Allow of
-                           true -> {ok, binary_to_atom(Bin, utf8)};
-                           false -> {error, <<"atom_not_existing">>} 
-                       end;
-        Atom -> {ok, Atom}
-    end;
-to_atom_safe(Atom) when is_atom(Atom) -> {ok, Atom};
-to_atom_safe(_) -> {error, <<"badarg">>}.
 
 %% Store a complete Subject (with tag) by name using persistent_term
 %% This is useful for OTP actors where the tag must be preserved
