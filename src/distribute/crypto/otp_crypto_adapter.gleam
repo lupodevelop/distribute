@@ -3,7 +3,7 @@
 //// This adapter provides real cryptographic security using Erlang's built-in
 //// `:crypto` module (OpenSSL/LibreSSL backend):
 //// - **X25519** for key exchange (Curve25519 ECDH)
-//// - **ChaCha20-Poly1305** for AEAD encryption
+//// - **ChaCha20-Poly1305** for AEAD encryption (RFC 8439, 12-byte nonces)
 //// - **HKDF-SHA256** for key derivation
 ////
 //// Requires no external dependencies beyond standard OTP 22+.
@@ -15,6 +15,13 @@
 //// - **Key rotation**: Rekey support with HKDF derivation
 //// - **Full metrics**: Tracks all operations
 //// - **OTP supervised**: Integrates with supervision trees
+////
+//// ## Nonce Policy
+////
+//// This implementation uses **12-byte nonces** as specified in RFC 8439.
+//// XChaCha20-Poly1305 (24-byte nonces) is NOT supported.
+//// Random nonces are generated per encryption, which is safe for typical
+//// message volumes (birthday bound ~2^48 messages per key).
 ////
 //// ## Usage
 ////
@@ -33,7 +40,7 @@
 //// ## Security Notes
 ////
 //// - Key material is never logged
-//// - Nonces are randomly generated (24 bytes)
+//// - Nonces are randomly generated (12 bytes, RFC 8439)
 //// - Key IDs are unpredictable
 //// - Old keys are discarded on rekey
 //// - Uses Erlang `:crypto` (not libsodium) — no native secure zeroing or mlock
@@ -132,10 +139,47 @@ type State {
 // Public API
 // =============================================================================
 
-/// Create a new sodium crypto adapter.
+/// Create a new OTP crypto adapter.
 ///
-/// This adapter provides real cryptographic security suitable for production.
-/// It uses X25519 for key exchange and ChaCha20-Poly1305 for encryption.
+/// Returns a `CryptoAdapter` that provides real cryptographic security using
+/// Erlang's built-in `:crypto` module (backed by OpenSSL/LibreSSL).
+///
+/// ## Cryptographic Algorithms
+///
+/// - **Key Exchange**: X25519 (Curve25519 ECDH)
+/// - **Encryption**: ChaCha20-Poly1305 AEAD (RFC 8439, 12-byte nonce)
+/// - **Key Derivation**: HKDF-SHA256
+///
+/// ## Features
+///
+/// - Ephemeral keys per handshake (forward secrecy)
+/// - Authenticated encryption with associated data
+/// - Key rotation via HKDF-based rekeying
+/// - Full metrics and health monitoring
+/// - OTP supervisor integration
+///
+/// ## Requirements
+///
+/// - OTP 22+ (for X25519 and ChaCha20-Poly1305 support)
+/// - No external dependencies
+///
+/// ## Example
+///
+/// ```gleam
+/// let adapter = otp_crypto_adapter.new()
+/// let opts = adapter.default_options("production_crypto")
+/// let assert Ok(handle) = adapter.init(opts)
+///
+/// // Complete handshake with remote node
+/// let assert Ok(result) = adapter.handshake_start(handle, local, remote, None)
+/// ```
+///
+/// ## Security Notes
+///
+/// - Keys are never logged
+/// - Nonces are randomly generated for each encryption
+/// - Old keys are discarded on rekey
+/// - Does NOT provide secure memory zeroing (use sodium_adapter for that)
 pub fn new() -> CryptoAdapter {
   adapter.CryptoAdapter(
     init: sodium_init,
@@ -152,6 +196,33 @@ pub fn new() -> CryptoAdapter {
 }
 
 /// Create a child specification for OTP supervision.
+///
+/// Returns a supervision child spec for integrating the OTP crypto adapter
+/// with OTP supervision trees. The provider will be automatically restarted
+/// on crashes.
+///
+/// ## Arguments
+///
+/// - `options` - Provider configuration options
+///
+/// ## Example
+///
+/// ```gleam
+/// let opts = adapter.default_options("cluster_crypto")
+/// let crypto_spec = otp_crypto_adapter.child_spec(opts)
+///
+/// supervision.start(
+///   children: [crypto_spec, transport_spec, discovery_spec],
+/// )
+/// ```
+///
+/// ## Lifecycle
+///
+/// The supervised process will:
+/// 1. Initialize crypto state and actor
+/// 2. Register in the global registry
+/// 3. Handle handshakes, encryption, and rekey commands
+/// 4. Clean up contexts and registry on shutdown
 pub fn child_spec(
   options: ProviderOptions,
 ) -> ChildSpecification(ProviderHandle) {
@@ -710,10 +781,10 @@ fn handle_decrypt(
 ) -> actor.Next(State, Command) {
   case unwrap_key_material(types.context_key_material(ctx)) {
     Ok(key_material) -> {
-      // Extract nonce (first 24 bytes) and ciphertext
-      case bit_array.slice(ciphertext_with_nonce, 0, 24) {
+      // Extract nonce (first 12 bytes per RFC 8439) and ciphertext
+      case bit_array.slice(ciphertext_with_nonce, 0, 12) {
         Ok(nonce) -> {
-          let ciphertext_start = 24
+          let ciphertext_start = 12
           let ciphertext_len =
             bit_array.byte_size(ciphertext_with_nonce) - ciphertext_start
           case
@@ -852,7 +923,33 @@ fn derive_aead_key(
 // Handle Lookup
 // =============================================================================
 
-/// Get a handle to a running provider by name.
+/// Get a handle to a running OTP crypto provider by name.
+///
+/// Retrieves a handle to a previously started OTP crypto adapter from
+/// the registry. Use this to obtain a handle when you didn't directly
+/// start the provider (e.g., it was started by a supervisor).
+///
+/// ## Arguments
+///
+/// - `name` - The registered name of the provider
+///
+/// ## Returns
+///
+/// - `Ok(handle)` - Valid handle to the running provider
+/// - `Error(Nil)` - No provider found with that name
+///
+/// ## Example
+///
+/// ```gleam
+/// // Provider started elsewhere (e.g., by supervisor)
+/// case otp_crypto_adapter.get_handle("cluster_crypto") {
+///   Ok(handle) -> {
+///     let ctx = adapter.secure_context(handle, remote_node)
+///     adapter.encrypt(handle, ctx, message)
+///   }
+///   Error(Nil) -> Error(CryptoNotInitialized)
+/// }
+/// ```
 pub fn get_handle(name: String) -> Result(ProviderHandle, Nil) {
   case registry.lookup_subject(name) {
     Ok(subject) -> Ok(types.new_handle(name, wrap_subject(subject)))
