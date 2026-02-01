@@ -1,6 +1,6 @@
 %% @doc FFI functions for sodium crypto adapter.
 %%
-%% Provides X25519 key exchange and XChaCha20-Poly1305 AEAD encryption
+%% Provides X25519 key exchange and ChaCha20-Poly1305 AEAD encryption
 %% using Erlang's built-in crypto module (which uses OpenSSL/LibreSSL).
 %%
 %% This module uses standard Erlang crypto functions that are available
@@ -9,14 +9,21 @@
 %% ## Algorithms
 %%
 %% - Key exchange: X25519 (Curve25519 ECDH)
-%% - AEAD: ChaCha20-Poly1305 (RFC 8439)
+%% - AEAD: ChaCha20-Poly1305 (RFC 8439, 12-byte nonce)
 %% - KDF: HKDF-SHA256
 %% - Random: crypto:strong_rand_bytes/1
+%%
+%% ## Nonce Policy
+%%
+%% This implementation uses **12-byte nonces** as specified in RFC 8439.
+%% XChaCha20-Poly1305 (24-byte nonces) is NOT supported.
+%% Nonces MUST be unique per key - we generate them randomly which is safe
+%% for reasonable message volumes (birthday bound ~2^48 for 12-byte nonces).
 %%
 %% ## Security Notes
 %%
 %% - Never log key material or secrets
-%% - Nonces are generated randomly (24 bytes for extended nonce)
+%% - Nonces are generated randomly (12 bytes, RFC 8439 standard)
 %% - Key IDs are unpredictable (timestamp + random)
 
 -module(crypto_sodium_ffi).
@@ -66,33 +73,21 @@ scalarmult(_, _) ->
 %% AEAD Encryption (ChaCha20-Poly1305)
 %% =============================================================================
 
-%% @doc Encrypt plaintext using ChaCha20-Poly1305 AEAD.
-%% Key must be 32 bytes, Nonce must be 12 bytes (or 24 for XChaCha variant).
+%% @doc Encrypt plaintext using ChaCha20-Poly1305 AEAD (RFC 8439).
+%% Key must be 32 bytes, Nonce must be 12 bytes.
 %% Returns {ok, Ciphertext} where Ciphertext includes the 16-byte auth tag.
+%%
+%% NOTE: Only 12-byte nonces are supported (standard ChaCha20-Poly1305).
+%% XChaCha20-Poly1305 (24-byte nonces) is NOT implemented.
 -spec aead_encrypt(binary(), binary(), binary(), binary()) ->
     {ok, binary()} | {error, term()}.
-aead_encrypt(Key, Nonce, AAD, Plaintext) when byte_size(Key) =:= 32 ->
+aead_encrypt(Key, Nonce, AAD, Plaintext) when byte_size(Key) =:= 32,
+                                               byte_size(Nonce) =:= 12 ->
     try
-        %% Use 12-byte nonce for standard ChaCha20-Poly1305
-        %% If nonce is 24 bytes, we use the first 16 as subkey derivation
-        ActualNonce = case byte_size(Nonce) of
-            12 -> Nonce;
-            24 ->
-                %% XChaCha20: derive subkey from first 16 bytes
-                <<NoncePrefix:16/binary, NonceSuffix:8/binary>> = Nonce,
-                %% Use HChaCha20 to derive subkey (simplified: use HKDF)
-                SubKey = hkdf_extract_expand(Key, NoncePrefix, <<"xchacha">>, 32),
-                %% Prepend 4 zero bytes + last 8 bytes of nonce
-                <<0:32, NonceSuffix/binary>>;
-            _ -> 
-                %% Fallback: hash to 12 bytes
-                <<H:12/binary, _/binary>> = crypto:hash(sha256, Nonce),
-                H
-        end,
         {Ciphertext, Tag} = crypto:crypto_one_time_aead(
             chacha20_poly1305,
             Key,
-            ActualNonce,
+            Nonce,
             Plaintext,
             AAD,
             true  %% encrypt
@@ -103,36 +98,32 @@ aead_encrypt(Key, Nonce, AAD, Plaintext) when byte_size(Key) =:= 32 ->
         _:Reason ->
             {error, {encrypt_failed, Reason}}
     end;
-aead_encrypt(_, _, _, _) ->
-    {error, invalid_key_size}.
+aead_encrypt(Key, _Nonce, _AAD, _Plaintext) when byte_size(Key) =/= 32 ->
+    {error, {invalid_key_size, byte_size(Key), expected_32}};
+aead_encrypt(_Key, Nonce, _AAD, _Plaintext) when byte_size(Nonce) =/= 12 ->
+    {error, {invalid_nonce_size, byte_size(Nonce), expected_12}}.
 
-%% @doc Decrypt ciphertext using ChaCha20-Poly1305 AEAD.
+%% @doc Decrypt ciphertext using ChaCha20-Poly1305 AEAD (RFC 8439).
 %% Key must be 32 bytes, Nonce must be 12 bytes.
 %% Ciphertext includes the 16-byte auth tag at the end.
 %% Returns {ok, Plaintext} or {error, decrypt_failed}.
+%%
+%% NOTE: Only 12-byte nonces are supported (standard ChaCha20-Poly1305).
+%% XChaCha20-Poly1305 (24-byte nonces) is NOT implemented.
 -spec aead_decrypt(binary(), binary(), binary(), binary()) ->
     {ok, binary()} | {error, term()}.
-aead_decrypt(Key, Nonce, AAD, CiphertextWithTag) when byte_size(Key) =:= 32 ->
+aead_decrypt(Key, Nonce, AAD, CiphertextWithTag) when byte_size(Key) =:= 32,
+                                                       byte_size(Nonce) =:= 12 ->
     try
         %% Extract tag (last 16 bytes)
         CipherLen = byte_size(CiphertextWithTag) - 16,
         case CipherLen >= 0 of
             true ->
                 <<Ciphertext:CipherLen/binary, Tag:16/binary>> = CiphertextWithTag,
-                ActualNonce = case byte_size(Nonce) of
-                    12 -> Nonce;
-                    24 ->
-                        <<NoncePrefix:16/binary, NonceSuffix:8/binary>> = Nonce,
-                        SubKey = hkdf_extract_expand(Key, NoncePrefix, <<"xchacha">>, 32),
-                        <<0:32, NonceSuffix/binary>>;
-                    _ ->
-                        <<H:12/binary, _/binary>> = crypto:hash(sha256, Nonce),
-                        H
-                end,
                 case crypto:crypto_one_time_aead(
                     chacha20_poly1305,
                     Key,
-                    ActualNonce,
+                    Nonce,
                     Ciphertext,
                     AAD,
                     Tag,
@@ -150,8 +141,10 @@ aead_decrypt(Key, Nonce, AAD, CiphertextWithTag) when byte_size(Key) =:= 32 ->
         _:Reason ->
             {error, {decrypt_failed, Reason}}
     end;
-aead_decrypt(_, _, _, _) ->
-    {error, invalid_key_size}.
+aead_decrypt(Key, _Nonce, _AAD, _CiphertextWithTag) when byte_size(Key) =/= 32 ->
+    {error, {invalid_key_size, byte_size(Key), expected_32}};
+aead_decrypt(_Key, Nonce, _AAD, _CiphertextWithTag) when byte_size(Nonce) =/= 12 ->
+    {error, {invalid_nonce_size, byte_size(Nonce), expected_12}}.
 
 %% =============================================================================
 %% Key Derivation (HKDF-SHA256)
@@ -188,10 +181,15 @@ hkdf_expand(PRK, Info, Len, Acc, Counter) when Counter =< 255 ->
 random_bytes(N) when is_integer(N), N > 0 ->
     crypto:strong_rand_bytes(N).
 
-%% @doc Generate a 24-byte nonce for XChaCha20-Poly1305.
+%% @doc Generate a 12-byte nonce for ChaCha20-Poly1305 (RFC 8439).
+%%
+%% Uses cryptographically secure random bytes. For typical usage volumes,
+%% random nonces are safe (birthday bound ~2^48 messages per key).
+%% If you need to encrypt more than ~2^48 messages with the same key,
+%% consider using a counter-based nonce scheme instead.
 -spec generate_nonce() -> binary().
 generate_nonce() ->
-    crypto:strong_rand_bytes(24).
+    crypto:strong_rand_bytes(12).
 
 %% =============================================================================
 %% Utilities
