@@ -9,13 +9,15 @@
 
 **Distribute** brings the full power of Erlang's distributed computing to Gleam, with a **type-safe** and **gleam_otp-integrated** API.
 
-While Gleam runs on the BEAM, accessing distributed primitives (like connecting nodes, global registration, or RPC) traditionally required dealing with untyped atoms and unsafe Erlang terms. **Distribute v2.0** solves this by providing:
+While Gleam runs on the BEAM, accessing distributed primitives (like connecting nodes, global registration, or RPC) traditionally required dealing with untyped atoms and unsafe Erlang terms. **Distribute v2.1** solves this by providing:
 
 ✅ **Type-safe messaging** using binary codecs (`Encoder(a)`, `Decoder(a)`) and `gleam/erlang/process.Subject(BitArray)`  
 ✅ **Full gleam_otp integration** — integrates with actors and selectors  
 ✅ **Explicit error handling** — all operations return typed `Result` values  
 ✅ **Composable codecs** — built-in support for primitives, Option, Result, tuples, and custom types  
-✅ **Production-ready** — comprehensive error handling, deprecated legacy APIs  
+✅ **Production-ready crypto** — ChaCha20-Poly1305 + X25519 via OTP `:crypto`  
+✅ **Capability negotiation** — Protocol versioning for rolling upgrades  
+✅ **Intelligent retry** — Exponential backoff with jitter strategies  
 
 > **Note:** Use the `_typed` variants of all functions (e.g., `send_global_typed`, `broadcast_typed`) for full type safety. Legacy untyped functions are deprecated and will be removed in v3.0.  
 
@@ -30,13 +32,20 @@ While Gleam runs on the BEAM, accessing distributed primitives (like connecting 
 - **Remote Monitoring** — Monitor processes and nodes for failure detection across the network.
 - **RPC** — Perform Remote Procedure Calls to any Erlang/Gleam module with timeout control.
 
-### Type-Safe API (v2.0)
+### Type-Safe API (v2.1)
 
 - **Binary Codec System** — Encoder/Decoder types for compile-time safe serialization
-- **Envelope Protocol** — Tag + version validation for protocol mismatch detection (see `distribute/codec.wrap_envelope` and `distribute/codec.unwrap_envelope`)
+- **Envelope Protocol** — Tag + version validation for protocol mismatch detection
 - **Typed Messaging** — `send_typed`, `call_typed`, `broadcast_typed` with explicit errors
 - **Receiver Helpers** — Convenient `receive_typed` integration with gleam/erlang/process
 - **gleam_otp Compatible** — Use standard `Subject(BitArray)` from gleam/erlang/process
+
+### New in v2.1.0
+
+- **Capability Negotiation** — Exchange node capabilities during handshake, negotiate protocol versions
+- **OTP Crypto Adapter** — Production-ready encryption: ChaCha20-Poly1305 + X25519 key exchange
+- **Retry Module** — Exponential backoff with 4 jitter strategies (FullJitter, EqualJitter, DecorrelatedJitter)
+- **Protocol Versioning** — `schema_encode_for_node` / `schema_decode_from_node` for heterogeneous clusters
 
 ### Advanced Features
 
@@ -48,10 +57,10 @@ While Gleam runs on the BEAM, accessing distributed primitives (like connecting 
 ```toml
 # gleam.toml
 [dependencies]
-gleam_stdlib = ">= 0.43.0"
+gleam_stdlib = ">= 0.44.0"
 gleam_erlang = ">= 0.5.0"
 gleam_otp = ">= 0.1.0"
-distribute = "~> 2.0"
+distribute = "~> 2.1"
 ```
 
 ```sh
