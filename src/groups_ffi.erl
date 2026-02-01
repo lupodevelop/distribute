@@ -3,6 +3,9 @@
 -export([join/2, leave/2, members/1, broadcast/2, broadcast_binary/2,
          is_ok_atom/1, get_error_reason/1, unwrap_members/1]).
 
+%% Import shared utility for safe atom conversion
+-import(distribute_ffi_utils, [to_atom_safe/1]).
+
 join(Group, Pid) when is_pid(Pid) ->
     case to_atom_safe(Group) of
         {ok, G} -> 
@@ -55,8 +58,9 @@ broadcast_binary(Group, BinaryMsg) when is_binary(BinaryMsg) ->
         {ok, G} ->
             case try_pg_get_members(G) of
                 {ok, Members} ->
-                    %% Validate binary size (max 10MB for safety)
-                    case byte_size(BinaryMsg) > 10485760 of
+                    %% Validate binary size against configurable limit
+                    MaxSize = settings_ffi:get_max_message_size(),
+                    case MaxSize > 0 andalso byte_size(BinaryMsg) > MaxSize of
                         true -> {error, <<"message_too_large">>};
                         false ->
                             %% Filter out dead processes before sending
@@ -87,21 +91,6 @@ get_error_reason(_) -> <<"unknown_error">>.
 
 unwrap_members({ok, Members}) when is_list(Members) -> Members;
 unwrap_members(_) -> [].
-
-%% Internal helpers
-to_atom_safe(Bin) when is_list(Bin) -> to_atom_safe(list_to_binary(Bin));
-to_atom_safe(Bin) when is_binary(Bin) -> 
-    Allow = persistent_term:get(distribute_allow_atom_creation, false),
-    case catch binary_to_existing_atom(Bin, utf8) of
-        {'EXIT', _} -> 
-            case Allow of
-                true -> {ok, binary_to_atom(Bin, utf8)};
-                false -> {error, <<"atom_not_existing">>} 
-            end;
-        Atom -> {ok, Atom}
-    end;
-to_atom_safe(Atom) when is_atom(Atom) -> {ok, Atom};
-to_atom_safe(_) -> {error, <<"badarg">>}.
 
 %% Internal helpers using try/catch to avoid crashing when :pg isn't running
 try_pg_join(G, Pid) ->
