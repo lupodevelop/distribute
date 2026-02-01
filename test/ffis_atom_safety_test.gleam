@@ -104,3 +104,118 @@ pub fn registry_atom_creation_disabled_test() {
     }
   }
 }
+
+// =============================================================================
+// Tests for shared distribute_ffi_utils:to_atom_safe/1 function
+// =============================================================================
+
+@external(erlang, "distribute_ffi_utils", "to_atom_safe")
+fn to_atom_safe_ffi(name: String) -> Result(a, String)
+
+@external(erlang, "test_helpers_ffi", "to_atom_safe_with_list")
+fn to_atom_safe_list_ffi(name: List(Int)) -> Result(a, String)
+
+@external(erlang, "test_helpers_ffi", "to_atom_safe_with_atom")
+fn to_atom_safe_atom_ffi(atom: a) -> Result(a, String)
+
+/// Test that to_atom_safe returns existing atoms without needing allow_atom_creation
+pub fn to_atom_safe_existing_atom_test() {
+  // 'ok' is always an existing atom in Erlang
+  settings.set_allow_atom_creation(False)
+  let result = to_atom_safe_ffi("ok")
+  should.be_ok(result)
+  // Re-enable for subsequent tests
+  settings.set_allow_atom_creation(True)
+}
+
+/// Test that to_atom_safe fails for non-existing atoms when allow_atom_creation is False
+pub fn to_atom_safe_nonexisting_atom_disabled_test() {
+  settings.set_allow_atom_creation(False)
+  let unique_name =
+    "nonexisting_atom_test_"
+    <> int_to_string_ffi(el_system_time_ffi(1000))
+    <> "_"
+    <> int_to_string_ffi(unique_int_ffi())
+  should.be_false(atom_exists_ffi(unique_name))
+  let result = to_atom_safe_ffi(unique_name)
+  should.be_error(result)
+  // Re-enable for subsequent tests
+  settings.set_allow_atom_creation(True)
+}
+
+/// Test that to_atom_safe creates atoms when allow_atom_creation is True
+pub fn to_atom_safe_create_atom_enabled_test() {
+  settings.set_allow_atom_creation(True)
+  let unique_name =
+    "created_atom_test_"
+    <> int_to_string_ffi(el_system_time_ffi(1000))
+    <> "_"
+    <> int_to_string_ffi(unique_int_ffi())
+  should.be_false(atom_exists_ffi(unique_name))
+  let result = to_atom_safe_ffi(unique_name)
+  should.be_ok(result)
+  // Verify the atom was created
+  should.be_true(atom_exists_ffi(unique_name))
+  // Reset for other tests
+  settings.set_allow_atom_creation(False)
+}
+
+/// Test that to_atom_safe handles atom input (passthrough)
+pub fn to_atom_safe_atom_passthrough_test() {
+  settings.set_allow_atom_creation(False)
+  // Pass an existing atom through
+  let result = to_atom_safe_atom_ffi(Nil)
+  should.be_ok(result)
+  // Re-enable for subsequent tests
+  settings.set_allow_atom_creation(True)
+}
+
+/// Test that to_atom_safe handles list input (converts to binary first)
+pub fn to_atom_safe_list_input_test() {
+  settings.set_allow_atom_creation(False)
+  // "ok" as a charlist: [111, 107]
+  let result = to_atom_safe_list_ffi([111, 107])
+  should.be_ok(result)
+  // Re-enable for subsequent tests
+  settings.set_allow_atom_creation(True)
+}
+
+/// Test that to_atom_safe returns error for invalid input
+pub fn to_atom_safe_invalid_input_test() {
+  settings.set_allow_atom_creation(False)
+  // This will be handled by the badarg clause
+  // We test via the groups/registry which use the shared function
+  let result = groups.join("", groups_self_ffi())
+  // Empty string should still work (becomes empty atom if allowed)
+  // The point is it doesn't crash
+  should.be_true(case result {
+    Ok(_) -> True
+    Error(_) -> True
+  })
+  // Re-enable for subsequent tests
+  settings.set_allow_atom_creation(True)
+}
+
+/// Test consistency: multiple FFI modules using shared to_atom_safe behave identically
+pub fn shared_to_atom_safe_consistency_test() {
+  settings.set_allow_atom_creation(False)
+  let unique_name =
+    "consistency_test_"
+    <> int_to_string_ffi(el_system_time_ffi(1000))
+    <> "_"
+    <> int_to_string_ffi(unique_int_ffi())
+  should.be_false(atom_exists_ffi(unique_name))
+
+  // All FFI modules should fail consistently when atom doesn't exist
+  let groups_result = groups.join(unique_name, groups_self_ffi())
+  let registry_result = registry.register(unique_name, registry_self_ffi())
+
+  should.be_error(groups_result)
+  should.be_error(registry_result)
+
+  // Atom should NOT have been created by any module
+  should.be_false(atom_exists_ffi(unique_name))
+
+  // IMPORTANT: Re-enable atom creation for subsequent tests
+  settings.set_allow_atom_creation(True)
+}

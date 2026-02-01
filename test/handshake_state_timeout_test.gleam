@@ -1,6 +1,7 @@
 import distribute/handshake.{Capability, Hello}
 import distribute/handshake/state.{
   Failed, Received, Sent, handshake_on_timeout, initiator_start,
+  stub_crypto_provider,
 }
 import gleeunit
 import gleeunit/should
@@ -15,7 +16,10 @@ pub fn initiator_retries_and_timeout_test() {
       Capability("proto", 1, 1, []),
     ])
 
-  let #(_hello_b, istate) = initiator_start(local_hello)
+  // Use stub crypto provider for testing
+  let crypto = stub_crypto_provider()
+
+  let #(_hello_b, istate) = initiator_start(local_hello, crypto)
 
   case handshake_on_timeout(istate) {
     Ok(Sent(_b1, state1)) ->
