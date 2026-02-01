@@ -14,6 +14,10 @@ pub type HandshakeMessage {
   Init(process.Subject(HandshakeMessage), Int)
 }
 
+/// Start an initiator handshake actor.
+///
+/// Uses the stub crypto provider by default. For production use,
+/// use `start_initiator_handshake_with_crypto` with a real provider.
 pub fn start_initiator_handshake(
   local: handshake.Hello,
   timeout_ms: Int,
@@ -21,6 +25,31 @@ pub fn start_initiator_handshake(
   on_success: fn(String, handshake.MemberMetadata) -> Nil,
   on_failure: fn(String, String) -> Nil,
   registry: Option(process.Subject(registry_actor.RegistryCommand)),
+) -> Result(process.Subject(HandshakeMessage), actor.StartError) {
+  start_initiator_handshake_with_crypto(
+    local,
+    timeout_ms,
+    send_fn,
+    on_success,
+    on_failure,
+    registry,
+    hs.stub_crypto_provider(),
+  )
+}
+
+/// Start an initiator handshake actor with a specific crypto provider.
+///
+/// ## Arguments
+///
+/// - `crypto` - Crypto provider to use for key exchange
+pub fn start_initiator_handshake_with_crypto(
+  local: handshake.Hello,
+  timeout_ms: Int,
+  send_fn: fn(BitArray) -> Nil,
+  on_success: fn(String, handshake.MemberMetadata) -> Nil,
+  on_failure: fn(String, String) -> Nil,
+  registry: Option(process.Subject(registry_actor.RegistryCommand)),
+  crypto: hs.CryptoProvider,
 ) -> Result(process.Subject(HandshakeMessage), actor.StartError) {
   let initial_state: Result(
     #(hs.HandshakeState, process.Subject(HandshakeMessage), Int),
@@ -30,7 +59,7 @@ pub fn start_initiator_handshake(
   |> actor.on_message(fn(state, msg) {
     case state, msg {
       Error(_), Init(subject, timeout) -> {
-        let #(_, new_state) = hs.initiator_start(local)
+        let #(_, new_state) = hs.initiator_start(local, crypto)
         case handshake.encode_hello(local) {
           Ok(bytes) -> send_fn(bytes)
           Error(_) -> Nil
@@ -127,6 +156,29 @@ pub fn start_responder_handshake(
   on_failure: fn(String, String) -> Nil,
   registry: Option(process.Subject(registry_actor.RegistryCommand)),
 ) -> Result(process.Subject(HandshakeMessage), actor.StartError) {
+  start_responder_handshake_with_crypto(
+    timeout_ms,
+    send_fn,
+    on_success,
+    on_failure,
+    registry,
+    hs.stub_crypto_provider(),
+  )
+}
+
+/// Start a responder handshake actor with a specific crypto provider.
+///
+/// ## Arguments
+///
+/// - `crypto` - Crypto provider to use for key exchange
+pub fn start_responder_handshake_with_crypto(
+  timeout_ms: Int,
+  send_fn: fn(BitArray) -> Nil,
+  on_success: fn(String, handshake.MemberMetadata) -> Nil,
+  on_failure: fn(String, String) -> Nil,
+  registry: Option(process.Subject(registry_actor.RegistryCommand)),
+  crypto: hs.CryptoProvider,
+) -> Result(process.Subject(HandshakeMessage), actor.StartError) {
   let initial_state: Result(
     #(hs.HandshakeState, process.Subject(HandshakeMessage), Int),
     Nil,
@@ -135,7 +187,7 @@ pub fn start_responder_handshake(
   |> actor.on_message(fn(state, msg) {
     case state, msg {
       Error(_), Init(subject, timeout) -> {
-        let new_state = hs.responder_init()
+        let new_state = hs.responder_init(crypto)
         actor.continue(Ok(#(new_state, subject, timeout)))
       }
       Ok(#(current, subject, timeout)), NetworkMessage(bytes) -> {
@@ -391,10 +443,10 @@ fn schedule_if_waiting(
   timeout_ms: Int,
 ) -> Nil {
   case state {
-    hs.InitiatorState(_, _, _, _, Some(tag), _, _) -> {
+    hs.InitiatorState(_, _, _, _, Some(tag), _, _, _) -> {
       schedule_timer_with_subject(subject, tag, timeout_ms)
     }
-    hs.ResponderState(_, _, _, Some(tag), _, _) -> {
+    hs.ResponderState(_, _, _, Some(tag), _, _, _) -> {
       schedule_timer_with_subject(subject, tag, timeout_ms)
     }
     _ -> Nil
