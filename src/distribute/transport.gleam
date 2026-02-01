@@ -44,12 +44,14 @@
 //// }
 //// ```
 
+import distribute/retry
 import distribute/transport/adapter
 import distribute/transport/beam_adapter
 import distribute/transport/types.{
   type AdapterError, type AdapterHandle, type DeliveryCallback,
   type HealthStatus, type SendError, type SendOptions, type SubscriptionId,
 }
+import gleam/erlang/process
 import gleam/otp/supervision.{type ChildSpecification}
 import gleam/result
 
@@ -94,12 +96,60 @@ pub fn child_spec() -> ChildSpecification(AdapterHandle) {
 /// This function is primarily useful for testing or simple scripts.
 ///
 /// Returns the adapter handle on success, or an error if startup fails.
+/// Uses a default retry policy with 3 attempts and exponential backoff.
 pub fn start_link() -> Result(AdapterHandle, AdapterError) {
+  start_link_with_retry(retry.default_with_jitter())
+}
+
+/// Start the transport adapter with a custom retry policy.
+///
+/// This function will retry the startup operation according to the provided
+/// policy, with exponential backoff and optional jitter between attempts.
+///
+/// ## Example
+///
+/// ```gleam
+/// import distribute/transport
+/// import distribute/retry
+///
+/// // Aggressive retry for critical systems
+/// let policy = retry.aggressive()
+/// let assert Ok(handle) = transport.start_link_with_retry(policy)
+///
+/// // Or with custom settings
+/// let custom = retry.default_with_jitter()
+///   |> retry.with_max_attempts(5)
+///   |> retry.with_base_delay_ms(200)
+/// let assert Ok(handle) = transport.start_link_with_retry(custom)
+/// ```
+pub fn start_link_with_retry(
+  policy: retry.RetryPolicy,
+) -> Result(AdapterHandle, AdapterError) {
   let opts =
     adapter.default_options(default_adapter_name)
     |> fn(o) { types.AdapterOptions(..o, name: default_adapter_name) }
 
-  beam_adapter.new().start(opts)
+  do_start_with_retry(opts, policy, 1)
+}
+
+fn do_start_with_retry(
+  opts: types.AdapterOptions,
+  policy: retry.RetryPolicy,
+  attempt: Int,
+) -> Result(AdapterHandle, AdapterError) {
+  case beam_adapter.new().start(opts) {
+    Ok(handle) -> Ok(handle)
+    Error(err) -> {
+      case retry.should_retry(policy, attempt) {
+        True -> {
+          let delay = retry.delay_ms(policy, attempt)
+          process.sleep(delay)
+          do_start_with_retry(opts, policy, attempt + 1)
+        }
+        False -> Error(err)
+      }
+    }
+  }
 }
 
 // =============================================================================
