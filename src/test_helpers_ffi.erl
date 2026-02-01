@@ -1,6 +1,7 @@
 %% Test helper FFI for Gleam tests
 -module(test_helpers_ffi).
--export([binary_to_existing_atom_exists/1, get_allow_atom_creation/0, inspect_to_atom/1, inspect_to_atom_status/1]).
+-export([binary_to_existing_atom_exists/1, get_allow_atom_creation/0, inspect_to_atom/1, inspect_to_atom_status/1,
+         to_atom_safe_with_list/1, to_atom_safe_with_atom/1]).
 
 binary_to_existing_atom_exists(Bin) when is_binary(Bin) ->
     case catch binary_to_existing_atom(Bin, utf8) of
@@ -35,3 +36,11 @@ inspect_to_atom_status(Bin) when is_binary(Bin) ->
 inspect_to_atom_status(List) when is_list(List) -> inspect_to_atom_status(list_to_binary(List));
 inspect_to_atom_status(Atom) when is_atom(Atom) -> <<"existing">>;
 inspect_to_atom_status(_) -> <<"error">>.
+
+%% Helper to test to_atom_safe with list input (charlist)
+to_atom_safe_with_list(List) when is_list(List) ->
+    distribute_ffi_utils:to_atom_safe(List).
+
+%% Helper to test to_atom_safe with atom input (passthrough)
+to_atom_safe_with_atom(Atom) when is_atom(Atom) ->
+    distribute_ffi_utils:to_atom_safe(Atom).
