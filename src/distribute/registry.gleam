@@ -6,11 +6,27 @@
 /// When a process is registered globally, it can be looked up by name from any
 /// node in the cluster. If a network partition occurs, the registry will
 /// eventually resolve conflicts when the partition heals.
+///
+/// ## Retry with Backoff
+///
+/// For distributed environments with transient connectivity issues, use
+/// `register_with_strategy` with exponential backoff and jitter:
+///
+/// ```gleam
+/// import distribute/registry
+/// import distribute/retry
+///
+/// // Recommended: exponential backoff with jitter
+/// let policy = retry.default_with_jitter()
+/// registry.register_with_strategy(subject, "my-service", policy)
+/// ```
 import distribute/codec
 import distribute/global
 import distribute/log
+import distribute/retry
 import gleam/dynamic.{type Dynamic}
 import gleam/erlang/process
+import gleam/int
 import gleam/string
 
 /// Re-export Pid from gleam/erlang/process for API compatibility.
@@ -326,7 +342,99 @@ pub fn register_global(
   register_typed(name, global.subject(global_subject))
 }
 
-/// Synchronous registration with retry logic.
+/// Synchronous registration with retry logic and exponential backoff.
+///
+/// Attempts to register a GlobalSubject using the provided retry policy.
+/// This is the recommended method for production use as it supports
+/// exponential backoff and jitter to prevent thundering herd problems.
+///
+/// **Parameters:**
+/// - `global_subject`: The GlobalSubject to register
+/// - `name`: The global name to register under
+/// - `policy`: Retry policy with backoff configuration
+///
+/// **Example:**
+/// ```gleam
+/// import distribute/retry
+///
+/// // Recommended: exponential backoff with jitter
+/// let policy = retry.default_with_jitter()
+/// registry.register_with_strategy(subject, "my-service", policy)
+///
+/// // Custom policy for critical services
+/// let critical_policy = retry.aggressive()
+///   |> retry.with_max_attempts(10)
+/// registry.register_with_strategy(subject, "critical-service", critical_policy)
+/// ```
+///
+/// Returns Ok(Nil) on success, Error(RegisterError) if all retries fail.
+pub fn register_with_strategy(
+  global_subject: global.GlobalSubject(msg),
+  name: String,
+  policy: retry.RetryPolicy,
+) -> Result(Nil, RegisterError) {
+  do_register_with_strategy(global_subject, name, policy, 1)
+}
+
+fn do_register_with_strategy(
+  global_subject: global.GlobalSubject(msg),
+  name: String,
+  policy: retry.RetryPolicy,
+  attempt: Int,
+) -> Result(Nil, RegisterError) {
+  case register_global(global_subject, name) {
+    Ok(Nil) -> {
+      case attempt > 1 {
+        True ->
+          log.info("Registration succeeded after retries", [
+            #("name", name),
+            #("total_attempts", int.to_string(attempt)),
+          ])
+        False -> Nil
+      }
+      Ok(Nil)
+    }
+    Error(NetworkError(reason)) -> {
+      // Check if we should retry (guards can't call functions)
+      case retry.should_retry(policy, attempt) {
+        True -> {
+          let delay_result = retry.calculate_delay(policy, attempt)
+          log.warn("Registration attempt failed, retrying with backoff...", [
+            #("name", name),
+            #("attempt", int.to_string(attempt)),
+            #("max_attempts", int.to_string(retry.total_attempts(policy))),
+            #("delay_ms", int.to_string(delay_result.delay_ms)),
+            #("base_delay_ms", int.to_string(delay_result.base_delay_ms)),
+            #("reason", reason),
+          ])
+          process.sleep(delay_result.delay_ms)
+          do_register_with_strategy(global_subject, name, policy, attempt + 1)
+        }
+        False -> {
+          log.error("Registration failed after max retries", [
+            #("name", name),
+            #("attempt", int.to_string(attempt)),
+            #("reason", reason),
+          ])
+          Error(NetworkError(reason))
+        }
+      }
+    }
+    Error(err) -> {
+      log.error("Registration failed permanently", [
+        #("name", name),
+        #("attempt", int.to_string(attempt)),
+        #("error", classify_register_error_to_string(err)),
+      ])
+      Error(err)
+    }
+  }
+}
+
+/// Synchronous registration with simple retry logic.
+///
+/// **DEPRECATED:** Use `register_with_strategy` with a retry policy instead.
+/// This function uses fixed delays which can cause thundering herd problems.
 ///
 /// Attempts to register a GlobalSubject, retrying up to `max_retries` times
 /// if network errors occur. Useful in distributed environments with transient
@@ -339,41 +447,22 @@ pub fn register_global(
 /// - `retry_delay_ms`: Delay between retries in milliseconds (default: 100)
 ///
 /// Returns Ok(Nil) on success, Error(RegisterError) if all retries fail.
+@deprecated("Use register_with_strategy with retry.RetryPolicy instead")
 pub fn register_with_retry(
   global_subject: global.GlobalSubject(msg),
   name: String,
   max_retries: Int,
   retry_delay_ms: Int,
 ) -> Result(Nil, RegisterError) {
-  do_register_with_retry(global_subject, name, max_retries, retry_delay_ms, 0)
-}
+  // Convert legacy parameters to policy for backward compatibility
+  let policy =
+    retry.default()
+    |> retry.with_max_attempts(max_retries + 1)
+    |> retry.with_base_delay_ms(retry_delay_ms)
+    |> retry.with_max_delay_ms(retry_delay_ms)
+    |> retry.with_jitter(retry.NoJitter)
 
-fn do_register_with_retry(
-  global_subject: global.GlobalSubject(msg),
-  name: String,
-  max_retries: Int,
-  retry_delay_ms: Int,
-  attempt: Int,
-) -> Result(Nil, RegisterError) {
-  case register_global(global_subject, name) {
-    Ok(Nil) -> Ok(Nil)
-    Error(NetworkError(_)) if attempt < max_retries -> {
-      log.warn("Registration attempt failed, retrying...", [
-        #("name", name),
-        #("attempt", int_to_string(attempt + 1)),
-        #("max_retries", int_to_string(max_retries)),
-      ])
-      process.sleep(retry_delay_ms)
-      do_register_with_retry(
-        global_subject,
-        name,
-        max_retries,
-        retry_delay_ms,
-        attempt + 1,
-      )
-    }
-    Error(err) -> Error(err)
-  }
+  do_register_with_strategy(global_subject, name, policy, 1)
 }
 
 /// Lookup a GlobalSubject by name (async-friendly version).
@@ -443,7 +532,7 @@ fn do_lookup_with_timeout(
         True -> {
           log.warn("Lookup timeout exceeded", [
             #("name", name),
-            #("timeout_ms", int_to_string(timeout_ms)),
+            #("timeout_ms", int.to_string(timeout_ms)),
           ])
           Error(Nil)
         }
@@ -499,14 +588,3 @@ fn erlang_system_time_ms() -> Int {
 
 @external(erlang, "registry_ffi", "millisecond_atom")
 fn millisecond_atom() -> Dynamic
-
-fn int_to_string(i: Int) -> String {
-  // This would normally use gleam/int.to_string
-  case i {
-    0 -> "0"
-    1 -> "1"
-    2 -> "2"
-    3 -> "3"
-    _ -> "N"
-  }
-}
