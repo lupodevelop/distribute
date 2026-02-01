@@ -4,6 +4,9 @@ import gleam/bit_array
 import gleam/option.{type Option}
 import gleam/result
 
+/// Represents a capability advertised during handshake negotiation.
+///
+/// Contains protocol name, supported version range (min/max), and optional metadata.
 pub type Capability {
   Capability(
     protocol: String,
@@ -13,6 +16,9 @@ pub type Capability {
   )
 }
 
+/// Represents the initial Hello message sent when establishing a connection.
+///
+/// Contains the sending node's identifier, metadata, and advertised capabilities.
 pub type Hello {
   Hello(
     node_id: String,
@@ -21,26 +27,34 @@ pub type Hello {
   )
 }
 
+/// Message containing a list of capabilities for negotiation.
 pub type CapabilitiesMsg {
   CapabilitiesMsg(capabilities: List(Capability))
 }
 
+/// Represents acceptance of a negotiated protocol with specific version and parameters.
 pub type Accept {
   Accept(protocol: String, version: Int, params: List(#(String, String)))
 }
 
+/// Represents rejection of a handshake with a reason message.
 pub type Reject {
   Reject(reason: String)
 }
 
+/// Message containing cryptographic key exchange payload.
 pub type KeyExchangeMsg {
   KeyExchangeMsg(payload: BitArray)
 }
 
+/// A tagged envelope containing a versioned payload for wire transmission.
 pub type Envelope {
   Envelope(tag: String, version: Int, payload: BitArray)
 }
 
+/// Metadata about a cluster member after successful handshake.
+///
+/// Contains negotiated protocol versions and optional secure context for encryption.
 pub type MemberMetadata {
   MemberMetadata(
     negotiated_versions: List(#(String, Int)),
@@ -48,7 +62,7 @@ pub type MemberMetadata {
   )
 }
 
-// Errors local to handshake helpers
+/// Errors that can occur during handshake operations.
 pub type HandshakeError {
   InvalidEnvelope(String)
   UnsupportedProtocol(String)
@@ -56,9 +70,9 @@ pub type HandshakeError {
   CryptoError(String)
 }
 
-// Placeholder helpers (signatures only). Implementations will be added
-// in follow-up commits. Keeping them here documents the intended API.
-
+/// Peeks at the envelope tag and version without consuming the data.
+///
+/// Returns the tag string and version number if the envelope is valid.
 pub fn peek_envelope_tag(
   data: BitArray,
 ) -> Result(#(String, Int), HandshakeError) {
@@ -68,10 +82,16 @@ pub fn peek_envelope_tag(
   }
 }
 
+/// Wraps a payload in an envelope with the given tag and version.
+///
+/// Returns the complete envelope as a BitArray ready for transmission.
 pub fn wrap_envelope(tag: String, version: Int, payload: BitArray) -> BitArray {
   codec.wrap_envelope(tag, version, payload)
 }
 
+/// Unwraps an envelope, extracting the tag, version, and payload.
+///
+/// Returns a tuple of (tag, version, payload) or an error if invalid.
 pub fn unwrap_envelope(
   data: BitArray,
 ) -> Result(#(String, Int, BitArray), HandshakeError) {
@@ -103,7 +123,7 @@ fn pair_sized_decoder() -> codec.SizedDecoder(#(String, String)) {
   }
 }
 
-// Capability encoder/decoder
+/// Creates an encoder for serializing Capability values to binary format.
 pub fn capability_encoder() -> codec.Encoder(Capability) {
   fn(c: Capability) {
     let meta_enc = codec.list_encoder(pair_encoder())
@@ -118,6 +138,7 @@ pub fn capability_encoder() -> codec.Encoder(Capability) {
   }
 }
 
+/// Creates a sized decoder for deserializing Capability values from binary format.
 pub fn capability_sized_decoder() -> codec.SizedDecoder(Capability) {
   fn(data: BitArray) {
     use #(protocol, rest1) <- result.try(codec.string_sized_decoder()(data))
@@ -130,7 +151,7 @@ pub fn capability_sized_decoder() -> codec.SizedDecoder(Capability) {
   }
 }
 
-// Hello encoder/decoder
+/// Creates an encoder for serializing Hello messages to binary format.
 pub fn hello_encoder() -> codec.Encoder(Hello) {
   fn(h: Hello) {
     let info_enc = codec.list_encoder(pair_encoder())
@@ -142,6 +163,7 @@ pub fn hello_encoder() -> codec.Encoder(Hello) {
   }
 }
 
+/// Creates a sized decoder for deserializing Hello messages from binary format.
 pub fn hello_sized_decoder() -> codec.SizedDecoder(Hello) {
   fn(data: BitArray) {
     use #(node_id, rest1) <- result.try(codec.string_sized_decoder()(data))
@@ -155,7 +177,7 @@ pub fn hello_sized_decoder() -> codec.SizedDecoder(Hello) {
   }
 }
 
-// CapabilitiesMsg encoder/decoder (wraps a list of Capability)
+/// Creates an encoder for serializing CapabilitiesMsg to binary format.
 pub fn capabilities_encoder() -> codec.Encoder(CapabilitiesMsg) {
   fn(m: CapabilitiesMsg) {
     let enc = codec.list_encoder(capability_encoder())
@@ -163,6 +185,7 @@ pub fn capabilities_encoder() -> codec.Encoder(CapabilitiesMsg) {
   }
 }
 
+/// Creates a sized decoder for deserializing CapabilitiesMsg from binary format.
 pub fn capabilities_sized_decoder() -> codec.SizedDecoder(CapabilitiesMsg) {
   fn(data: BitArray) {
     use #(caps, rest) <- result.try(
@@ -172,7 +195,7 @@ pub fn capabilities_sized_decoder() -> codec.SizedDecoder(CapabilitiesMsg) {
   }
 }
 
-// Accept / Reject / KeyExchange
+/// Creates an encoder for serializing Accept messages to binary format.
 pub fn accept_encoder() -> codec.Encoder(Accept) {
   fn(a: Accept) {
     let params_enc = codec.list_encoder(pair_encoder())
@@ -183,6 +206,7 @@ pub fn accept_encoder() -> codec.Encoder(Accept) {
   }
 }
 
+/// Creates a sized decoder for deserializing Accept messages from binary format.
 pub fn accept_sized_decoder() -> codec.SizedDecoder(Accept) {
   fn(data: BitArray) {
     use #(protocol, rest1) <- result.try(codec.string_sized_decoder()(data))
@@ -194,10 +218,12 @@ pub fn accept_sized_decoder() -> codec.SizedDecoder(Accept) {
   }
 }
 
+/// Creates an encoder for serializing Reject messages to binary format.
 pub fn reject_encoder() -> codec.Encoder(Reject) {
   fn(r: Reject) { codec.encode(codec.string_encoder(), r.reason) }
 }
 
+/// Creates a sized decoder for deserializing Reject messages from binary format.
 pub fn reject_sized_decoder() -> codec.SizedDecoder(Reject) {
   fn(data: BitArray) {
     use #(reason, rest) <- result.try(codec.string_sized_decoder()(data))
@@ -205,10 +231,12 @@ pub fn reject_sized_decoder() -> codec.SizedDecoder(Reject) {
   }
 }
 
+/// Creates an encoder for serializing KeyExchangeMsg to binary format.
 pub fn keyexchange_encoder() -> codec.Encoder(KeyExchangeMsg) {
   fn(k: KeyExchangeMsg) { codec.encode(codec.bitarray_encoder(), k.payload) }
 }
 
+/// Creates a sized decoder for deserializing KeyExchangeMsg from binary format.
 pub fn keyexchange_sized_decoder() -> codec.SizedDecoder(KeyExchangeMsg) {
   fn(data: BitArray) {
     use #(payload, rest) <- result.try(codec.bitarray_sized_decoder()(data))
@@ -216,7 +244,7 @@ pub fn keyexchange_sized_decoder() -> codec.SizedDecoder(KeyExchangeMsg) {
   }
 }
 
-// Public schemas for convenient encode/decode with envelope
+/// Returns the codec schema for Hello messages with envelope support.
 pub fn hello_schema() -> codec.Schema(Hello) {
   codec.new_schema(
     tag: "distribute:hello",
@@ -226,6 +254,7 @@ pub fn hello_schema() -> codec.Schema(Hello) {
   )
 }
 
+/// Returns the codec schema for CapabilitiesMsg with envelope support.
 pub fn capabilities_schema() -> codec.Schema(CapabilitiesMsg) {
   codec.new_schema(
     tag: "distribute:capabilities",
@@ -235,6 +264,7 @@ pub fn capabilities_schema() -> codec.Schema(CapabilitiesMsg) {
   )
 }
 
+/// Returns the codec schema for Accept messages with envelope support.
 pub fn accept_schema() -> codec.Schema(Accept) {
   codec.new_schema(
     tag: "distribute:accept",
@@ -244,6 +274,7 @@ pub fn accept_schema() -> codec.Schema(Accept) {
   )
 }
 
+/// Returns the codec schema for Reject messages with envelope support.
 pub fn reject_schema() -> codec.Schema(Reject) {
   codec.new_schema(
     tag: "distribute:reject",
@@ -253,6 +284,7 @@ pub fn reject_schema() -> codec.Schema(Reject) {
   )
 }
 
+/// Returns the codec schema for KeyExchangeMsg with envelope support.
 pub fn keyexchange_schema() -> codec.Schema(KeyExchangeMsg) {
   codec.new_schema(
     tag: "distribute:keyexchange",
@@ -262,49 +294,58 @@ pub fn keyexchange_schema() -> codec.Schema(KeyExchangeMsg) {
   )
 }
 
-// Convenience wrappers
+/// Encodes a Hello message to binary format with envelope wrapper.
 pub fn encode_hello(h: Hello) -> Result(BitArray, codec.EncodeError) {
   codec.schema_encode(hello_schema(), h)
 }
 
+/// Decodes a Hello message from binary format, unwrapping the envelope.
 pub fn decode_hello(data: BitArray) -> Result(Hello, codec.DecodeError) {
   codec.schema_decode(hello_schema(), data)
 }
 
+/// Encodes a CapabilitiesMsg to binary format with envelope wrapper.
 pub fn encode_capabilities(
   m: CapabilitiesMsg,
 ) -> Result(BitArray, codec.EncodeError) {
   codec.schema_encode(capabilities_schema(), m)
 }
 
+/// Decodes a CapabilitiesMsg from binary format, unwrapping the envelope.
 pub fn decode_capabilities(
   data: BitArray,
 ) -> Result(CapabilitiesMsg, codec.DecodeError) {
   codec.schema_decode(capabilities_schema(), data)
 }
 
+/// Encodes an Accept message to binary format with envelope wrapper.
 pub fn encode_accept(a: Accept) -> Result(BitArray, codec.EncodeError) {
   codec.schema_encode(accept_schema(), a)
 }
 
+/// Decodes an Accept message from binary format, unwrapping the envelope.
 pub fn decode_accept(data: BitArray) -> Result(Accept, codec.DecodeError) {
   codec.schema_decode(accept_schema(), data)
 }
 
+/// Encodes a Reject message to binary format with envelope wrapper.
 pub fn encode_reject(r: Reject) -> Result(BitArray, codec.EncodeError) {
   codec.schema_encode(reject_schema(), r)
 }
 
+/// Decodes a Reject message from binary format, unwrapping the envelope.
 pub fn decode_reject(data: BitArray) -> Result(Reject, codec.DecodeError) {
   codec.schema_decode(reject_schema(), data)
 }
 
+/// Encodes a KeyExchangeMsg to binary format with envelope wrapper.
 pub fn encode_keyexchange(
   k: KeyExchangeMsg,
 ) -> Result(BitArray, codec.EncodeError) {
   codec.schema_encode(keyexchange_schema(), k)
 }
 
+/// Decodes a KeyExchangeMsg from binary format, unwrapping the envelope.
 pub fn decode_keyexchange(
   data: BitArray,
 ) -> Result(KeyExchangeMsg, codec.DecodeError) {
