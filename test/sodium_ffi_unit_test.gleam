@@ -2,6 +2,11 @@
 ////
 //// These tests exercise edge cases and fixed vectors (RFC 5869 HKDF vector)
 //// and validate basic properties for X25519 and AEAD operations.
+////
+//// ## Nonce Policy
+////
+//// This module tests ChaCha20-Poly1305 with **12-byte nonces** (RFC 8439).
+//// XChaCha20-Poly1305 (24-byte nonces) is NOT supported.
 
 import gleam/bit_array
 import gleeunit/should
@@ -42,6 +47,9 @@ fn ffi_aead_decrypt(
   aad: BitArray,
   ciphertext: BitArray,
 ) -> Result(BitArray, Nil)
+
+@external(erlang, "crypto_sodium_ffi", "random_bytes")
+fn ffi_random_bytes(n: Int) -> BitArray
 
 // -----------------------------------------------------------------------------
 // HKDF fixed vector test (RFC 5869 - Test case 1)
@@ -214,7 +222,8 @@ pub fn gen_keypair_sizes_test() {
 
 pub fn nonce_size_test() {
   let n = ffi_generate_nonce()
-  should.be_true(bit_array.byte_size(n) >= 12)
+  // RFC 8439 specifies 12-byte nonces for ChaCha20-Poly1305
+  should.equal(bit_array.byte_size(n), 12)
 }
 
 // -----------------------------------------------------------------------------
@@ -318,4 +327,94 @@ pub fn aead_tamper_and_short_ciphertext_test() {
     }
     Error(_) -> panic as "hkdf failed"
   }
+}
+
+// -----------------------------------------------------------------------------
+// RFC 8439 Nonce Policy Tests
+// These tests verify that only 12-byte nonces are accepted (no XChaCha20)
+
+pub fn aead_rejects_24_byte_nonce_test() {
+  let ikm = <<"nonce-policy-test">>
+  let salt = <<>>
+  let info = <<"test">>
+
+  case ffi_hkdf(salt, ikm, info, 32) {
+    Ok(aead_key) -> {
+      // Generate a 24-byte nonce (XChaCha20 style - NOT supported)
+      let invalid_nonce = ffi_random_bytes(24)
+      let aad = <<>>
+      let plaintext = <<"test data">>
+
+      // Encryption should fail with 24-byte nonce
+      case ffi_aead_encrypt(aead_key, invalid_nonce, aad, plaintext) {
+        Ok(_) -> panic as "encrypt should reject 24-byte nonce"
+        Error(_) -> Nil
+      }
+    }
+    Error(_) -> panic as "hkdf failed"
+  }
+}
+
+pub fn aead_rejects_8_byte_nonce_test() {
+  let ikm = <<"nonce-policy-test-8">>
+  let salt = <<>>
+  let info = <<"test">>
+
+  case ffi_hkdf(salt, ikm, info, 32) {
+    Ok(aead_key) -> {
+      // 8-byte nonce is too short
+      let invalid_nonce = ffi_random_bytes(8)
+      let aad = <<>>
+      let plaintext = <<"test data">>
+
+      case ffi_aead_encrypt(aead_key, invalid_nonce, aad, plaintext) {
+        Ok(_) -> panic as "encrypt should reject 8-byte nonce"
+        Error(_) -> Nil
+      }
+    }
+    Error(_) -> panic as "hkdf failed"
+  }
+}
+
+pub fn aead_accepts_exactly_12_byte_nonce_test() {
+  let ikm = <<"nonce-policy-test-12">>
+  let salt = <<>>
+  let info = <<"test">>
+
+  case ffi_hkdf(salt, ikm, info, 32) {
+    Ok(aead_key) -> {
+      // Exactly 12-byte nonce (RFC 8439 standard)
+      let valid_nonce = ffi_random_bytes(12)
+      let aad = <<>>
+      let plaintext = <<"RFC 8439 compliant">>
+
+      case ffi_aead_encrypt(aead_key, valid_nonce, aad, plaintext) {
+        Ok(ciphertext) -> {
+          // Decrypt should also work
+          case ffi_aead_decrypt(aead_key, valid_nonce, aad, ciphertext) {
+            Ok(pt) -> should.equal(pt, plaintext)
+            Error(_) -> panic as "decrypt failed with valid 12-byte nonce"
+          }
+        }
+        Error(_) -> panic as "encrypt should accept 12-byte nonce"
+      }
+    }
+    Error(_) -> panic as "hkdf failed"
+  }
+}
+
+pub fn nonces_are_unique_test() {
+  // Generate multiple nonces and verify they're all different
+  let n1 = ffi_generate_nonce()
+  let n2 = ffi_generate_nonce()
+  let n3 = ffi_generate_nonce()
+
+  should.not_equal(n1, n2)
+  should.not_equal(n2, n3)
+  should.not_equal(n1, n3)
+
+  // All should be 12 bytes
+  should.equal(bit_array.byte_size(n1), 12)
+  should.equal(bit_array.byte_size(n2), 12)
+  should.equal(bit_array.byte_size(n3), 12)
 }
