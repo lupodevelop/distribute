@@ -98,8 +98,35 @@ type State {
 
 /// Create a new no-op crypto adapter.
 ///
-/// **Warning:** This adapter provides no real encryption and is
-/// marked as a development-only provider.
+/// Returns a `CryptoAdapter` that implements the crypto behaviour contract
+/// with identity transformations (no actual encryption).
+///
+/// **⚠️ WARNING: This adapter provides NO REAL ENCRYPTION.**
+///
+/// Use this adapter ONLY for:
+/// - Development and local testing
+/// - Debugging message flow without crypto overhead
+/// - Benchmarking non-crypto performance
+///
+/// ## Features
+///
+/// - Instant handshake (completes immediately)
+/// - Identity encryption (plaintext = ciphertext)
+/// - Full metrics tracking for testing
+/// - Safe for supervision trees
+///
+/// ## Example
+///
+/// ```gleam
+/// let adapter = noop_adapter.new()
+/// let opts = adapter.development_options("test")
+/// let assert Ok(handle) = adapter.init(opts)
+/// ```
+///
+/// ## Security
+///
+/// Never use in production. The health status will report `Degraded`
+/// when `is_development = True` to remind you this is not secure.
 pub fn new() -> CryptoAdapter {
   adapter.CryptoAdapter(
     init: noop_init,
@@ -116,6 +143,31 @@ pub fn new() -> CryptoAdapter {
 }
 
 /// Create a child specification for OTP supervision.
+///
+/// Returns a supervision child spec that starts the noop adapter as a
+/// supervised worker. Use this when integrating with OTP supervision trees.
+///
+/// ## Arguments
+///
+/// - `options` - Provider options (name, timeouts, etc.)
+///
+/// ## Example
+///
+/// ```gleam
+/// let opts = adapter.development_options("crypto")
+/// let spec = noop_adapter.child_spec(opts)
+/// 
+/// // Add to supervisor
+/// let children = [spec, ...other_children]
+/// ```
+///
+/// ## Lifecycle
+///
+/// The supervised process will:
+/// 1. Start the actor with initial state
+/// 2. Register with the global registry
+/// 3. Handle all crypto commands
+/// 4. Clean up on shutdown
 pub fn child_spec(
   options: ProviderOptions,
 ) -> ChildSpecification(ProviderHandle) {
@@ -465,6 +517,27 @@ fn handle_message(state: State, message: Command) -> actor.Next(State, Command) 
 // =============================================================================
 
 /// Get a handle to a running provider by name.
+///
+/// Looks up a previously started noop adapter in the registry and returns
+/// a handle that can be used for crypto operations.
+///
+/// ## Arguments
+///
+/// - `name` - The name the provider was registered with
+///
+/// ## Returns
+///
+/// - `Ok(handle)` - Handle to the running provider
+/// - `Error(Nil)` - No provider registered with that name
+///
+/// ## Example
+///
+/// ```gleam
+/// case noop_adapter.get_handle("my_crypto") {
+///   Ok(handle) -> { adapter.encrypt }(handle, ctx, data)
+///   Error(Nil) -> Error(NotInitialized)
+/// }
+/// ```
 pub fn get_handle(name: String) -> Result(ProviderHandle, Nil) {
   case registry.lookup_subject(name) {
     Ok(subject) -> Ok(types.new_handle(name, wrap_subject(subject)))
