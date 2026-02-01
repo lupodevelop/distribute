@@ -39,9 +39,9 @@
 //// ```
 
 import distribute/registry
+import distribute/retry
 import distribute/transport/adapter.{type TransportAdapter}
 import distribute/transport/internal/circuit_breaker as cb
-import distribute/transport/internal/retry_policy
 import distribute/transport/types.{
   type AdapterError, type AdapterHandle, type AdapterOptions,
   type DeliveryCallback, type HealthStatus, type SendError, type SendOptions,
@@ -97,7 +97,7 @@ type State {
     options: AdapterOptions,
     circuit_breakers: Dict(String, cb.NodeCircuitBreaker),
     circuit_policy: cb.CircuitBreakerPolicy,
-    retry_policy: retry_policy.RetryPolicy,
+    retry_policy: retry.RetryPolicy,
     subscriptions: Dict(String, DeliveryCallback),
     next_subscription_id: Int,
     // Metrics
@@ -167,7 +167,7 @@ fn start_link(
       options: options,
       circuit_breakers: dict.new(),
       circuit_policy: cb.default_policy(),
-      retry_policy: retry_policy.default(),
+      retry_policy: retry.default_with_jitter(),
       subscriptions: dict.new(),
       next_subscription_id: 1,
       messages_sent: 0,
@@ -207,7 +207,7 @@ fn beam_start(options: AdapterOptions) -> Result(AdapterHandle, AdapterError) {
       options: options,
       circuit_breakers: dict.new(),
       circuit_policy: cb.default_policy(),
-      retry_policy: retry_policy.default(),
+      retry_policy: retry.default_with_jitter(),
       subscriptions: dict.new(),
       next_subscription_id: 1,
       messages_sent: 0,
@@ -490,18 +490,17 @@ fn do_send(
 fn attempt_send_with_retry(
   peer: String,
   payload: BitArray,
-  policy: retry_policy.RetryPolicy,
+  policy: retry.RetryPolicy,
   attempt: Int,
 ) -> Result(Nil, SendError) {
   case erlang_send(peer, payload) {
     Ok(_) -> Ok(Nil)
     Error(err) -> {
       case
-        types.is_transient_error(err)
-        && retry_policy.should_retry(policy, attempt)
+        types.is_transient_error(err) && retry.should_retry(policy, attempt)
       {
         True -> {
-          let delay = retry_policy.calculate_delay(policy, attempt)
+          let delay = retry.delay_ms(policy, attempt)
           process.sleep(delay)
           attempt_send_with_retry(peer, payload, policy, attempt + 1)
         }
