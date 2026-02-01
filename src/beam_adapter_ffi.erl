@@ -14,7 +14,8 @@ to_dynamic(Value) -> Value.
 %% Send binary payload to a registered process (local or remote)
 %% peer format: "registered_name@node" or "registered_name" (local)
 send_to_registered(Peer, Payload) when is_binary(Peer), is_binary(Payload) ->
-    case byte_size(Payload) > 10485760 of
+    MaxSize = settings_ffi:get_max_message_size(),
+    case MaxSize > 0 andalso byte_size(Payload) > MaxSize of
         true ->
             {error, <<"message_too_large">>};
         false ->
@@ -106,18 +107,6 @@ to_atom_safe(Binary) when is_binary(Binary) ->
     end;
 to_atom_safe(_) ->
     {error, <<"invalid_name">>}.
-
-%% Look up a registered process by name (string)
-whereis_name(Name) when is_binary(Name) ->
-    try binary_to_existing_atom(Name, utf8) of
-        Atom ->
-            case erlang:whereis(Atom) of
-                undefined -> {error, nil};
-                Pid -> {ok, Pid}
-            end
-    catch
-        error:badarg -> {error, nil}
-    end.
 
 %% Register a process with a string name
 register_process_by_name(Pid, Name) when is_pid(Pid), is_binary(Name) ->
