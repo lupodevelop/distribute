@@ -5,6 +5,64 @@ import gleam/bit_array
 import gleam/list
 import gleam/option.{type Option, None, Some}
 
+// =============================================================================
+// Crypto Provider Interface
+// =============================================================================
+
+/// Interface for crypto providers in the handshake state machine.
+///
+/// This type allows injecting different crypto implementations:
+/// - `provider_stub` for testing (no real crypto)
+/// - Custom implementations for production
+///
+/// ## Example
+///
+/// ```gleam
+/// // Use stub for testing
+/// let test_provider = stub_crypto_provider()
+///
+/// // Use custom provider
+/// let custom_provider = CryptoProvider(
+///   init: my_init,
+///   start_key_exchange: my_start_ke,
+///   handle_key_exchange: my_handle_ke,
+/// )
+/// ```
+pub type CryptoProvider {
+  CryptoProvider(
+    init: fn() -> provider.ProviderState,
+    start_key_exchange: fn(provider.ProviderState, BitArray) ->
+      #(BitArray, provider.ProviderState),
+    handle_key_exchange: fn(provider.ProviderState, BitArray) ->
+      #(
+        Option(BitArray),
+        provider.ProviderState,
+        Option(provider.SecureContext),
+      ),
+  )
+}
+
+/// Default stub crypto provider (insecure, for testing only).
+///
+/// Returns a `CryptoProvider` that wraps `provider_stub`, providing
+/// passthrough encryption (no actual security).
+///
+/// ## Warning
+///
+/// **Do NOT use in production.** This provider performs no actual
+/// cryptographic operations.
+pub fn stub_crypto_provider() -> CryptoProvider {
+  CryptoProvider(
+    init: provider_stub.init,
+    start_key_exchange: provider_stub.start_key_exchange,
+    handle_key_exchange: provider_stub.handle_key_exchange,
+  )
+}
+
+// =============================================================================
+// Types
+// =============================================================================
+
 /// Handshake state machine for secure connection establishment.
 /// 
 /// This module implements the state transitions for both initiator and
@@ -35,6 +93,7 @@ pub type HandshakeState {
     waiting: Option(String),
     retries: Int,
     pending: Option(BitArray),
+    crypto: CryptoProvider,
   )
   ResponderState(
     state: provider.ProviderState,
@@ -43,6 +102,7 @@ pub type HandshakeState {
     waiting: Option(String),
     retries: Int,
     pending: Option(BitArray),
+    crypto: CryptoProvider,
   )
   Established(#(String, provider.SecureContext))
   Failed(String)
@@ -61,8 +121,24 @@ pub type Outcome {
 /// 
 /// Produces the initial Hello message to send to the responder
 /// and returns the new initiator state.
-pub fn initiator_start(local: handshake.Hello) -> #(BitArray, HandshakeState) {
-  let state = provider_stub.init()
+///
+/// ## Arguments
+///
+/// - `local` - Local node's Hello message with capabilities
+/// - `crypto` - Crypto provider to use for key exchange
+///
+/// ## Example
+///
+/// ```gleam
+/// let crypto = stub_crypto_provider()  // Use real provider in production!
+/// let hello = handshake.Hello(node_id: "node1", capabilities: [...])
+/// let #(msg, state) = initiator_start(hello, crypto)
+/// ```
+pub fn initiator_start(
+  local: handshake.Hello,
+  crypto: CryptoProvider,
+) -> #(BitArray, HandshakeState) {
+  let state = { crypto.init }()
   let hello_b = handshake.encode_hello(local)
   case hello_b {
     Ok(bytes) -> #(
@@ -75,18 +151,58 @@ pub fn initiator_start(local: handshake.Hello) -> #(BitArray, HandshakeState) {
         Some("capabilities"),
         0,
         Some(bytes),
+        crypto,
       ),
     )
     Error(_) -> #(<<>>, Failed("encode hello failed"))
   }
 }
 
+/// Start the handshake as initiator using the default stub provider.
+///
+/// **Deprecated**: Use `initiator_start(local, crypto)` instead.
+/// This function exists for backward compatibility.
+///
+/// ## Warning
+///
+/// Uses `provider_stub` which provides NO actual security.
+@deprecated("Use initiator_start(local, crypto) with explicit provider")
+pub fn initiator_start_with_stub(
+  local: handshake.Hello,
+) -> #(BitArray, HandshakeState) {
+  initiator_start(local, stub_crypto_provider())
+}
+
 /// Initialize the responder state.
 /// 
 /// Creates a fresh responder state ready to receive a Hello message
 /// from the initiator.
-pub fn responder_init() -> HandshakeState {
-  ResponderState(provider_stub.init(), None, None, None, 0, None)
+///
+/// ## Arguments
+///
+/// - `crypto` - Crypto provider to use for key exchange
+///
+/// ## Example
+///
+/// ```gleam
+/// let crypto = stub_crypto_provider()  // Use real provider in production!
+/// let state = responder_init(crypto)
+/// ```
+pub fn responder_init(crypto: CryptoProvider) -> HandshakeState {
+  ResponderState({ crypto.init }(), None, None, None, 0, None, crypto)
+}
+
+/// Initialize the responder state using the default stub provider.
+///
+/// **Deprecated**: Use `responder_init(crypto)` instead.
+/// This function exists for backward compatibility.
+///
+/// ## Warning
+///
+/// Uses `provider_stub` which provides NO actual security.
+@deprecated("Use responder_init(crypto) with explicit provider")
+pub fn responder_init_with_stub() -> HandshakeState {
+  responder_init(stub_crypto_provider())
 }
 
 /// Handle an incoming message as the responder.
@@ -98,7 +214,15 @@ pub fn responder_handle_message(
   data: BitArray,
 ) -> Result(Outcome, String) {
   case state {
-    ResponderState(pstate, negotiated, secure, _waiting, _retries, _pending) -> {
+    ResponderState(
+      pstate,
+      negotiated,
+      secure,
+      _waiting,
+      _retries,
+      _pending,
+      crypto,
+    ) -> {
       // Try hello
       case handshake.decode_hello(data) {
         Ok(h) -> {
@@ -114,6 +238,7 @@ pub fn responder_handle_message(
                   Some("accept"),
                   0,
                   Some(caps_b),
+                  crypto,
                 ),
               ))
             Error(_) -> Error("encode capabilities failed")
@@ -124,7 +249,7 @@ pub fn responder_handle_message(
           case handshake.decode_accept(data) {
             Ok(a) -> {
               let #(out, new_state) =
-                provider_stub.start_key_exchange(pstate, <<>>)
+                { crypto.start_key_exchange }(pstate, <<>>)
               case handshake.encode_keyexchange(handshake.KeyExchangeMsg(out)) {
                 Ok(ke_b) ->
                   Ok(Sent(
@@ -136,6 +261,7 @@ pub fn responder_handle_message(
                       Some("ke"),
                       0,
                       Some(ke_b),
+                      crypto,
                     ),
                   ))
                 Error(_) -> Error("encode keyexchange failed")
@@ -146,7 +272,7 @@ pub fn responder_handle_message(
               case handshake.decode_keyexchange(data) {
                 Ok(k) -> {
                   let #(maybe_out, new_state2, maybe_ctx) =
-                    provider_stub.handle_key_exchange(pstate, k.payload)
+                    { crypto.handle_key_exchange }(pstate, k.payload)
                   case maybe_ctx {
                     Some(ctx) ->
                       Ok(Received(None, Established(#("negotiated", ctx))))
@@ -168,6 +294,7 @@ pub fn responder_handle_message(
                                   Some("ke"),
                                   0,
                                   Some(ob),
+                                  crypto,
                                 ),
                               ))
                             Error(_) -> Error("encode keyexchange failed")
@@ -182,6 +309,7 @@ pub fn responder_handle_message(
                               None,
                               0,
                               None,
+                              crypto,
                             ),
                           ))
                       }
@@ -216,6 +344,7 @@ pub fn initiator_handle_message(
       _waiting,
       _retries,
       _pending,
+      crypto,
     ) -> {
       // Expect capabilities
       case handshake.decode_capabilities(data) {
@@ -231,7 +360,7 @@ pub fn initiator_handle_message(
                 Ok(acc_b) -> {
                   // start key exchange
                   let #(ke_out, new_state) =
-                    provider_stub.start_key_exchange(pstate, <<>>)
+                    { crypto.start_key_exchange }(pstate, <<>>)
                   case
                     handshake.encode_keyexchange(handshake.KeyExchangeMsg(
                       ke_out,
@@ -248,6 +377,7 @@ pub fn initiator_handle_message(
                           Some("ke"),
                           0,
                           Some(bit_array.append(acc_b, ke_b)),
+                          crypto,
                         ),
                       ))
                     Error(_) -> Error("encode keyexchange failed")
@@ -273,7 +403,7 @@ pub fn initiator_handle_message(
           case handshake.decode_keyexchange(data) {
             Ok(k) -> {
               let #(maybe_out, new_state2, maybe_ctx) =
-                provider_stub.handle_key_exchange(pstate, k.payload)
+                { crypto.handle_key_exchange }(pstate, k.payload)
               case maybe_ctx {
                 Some(ctx) ->
                   Ok(Received(None, Established(#("negotiated", ctx))))
@@ -294,6 +424,7 @@ pub fn initiator_handle_message(
                               None,
                               0,
                               None,
+                              crypto,
                             ),
                           ))
                         Error(_) -> Error("encode keyexchange failed")
@@ -309,6 +440,7 @@ pub fn initiator_handle_message(
                           None,
                           0,
                           None,
+                          crypto,
                         ),
                       ))
                   }
@@ -332,7 +464,16 @@ pub fn handshake_on_timeout(state: HandshakeState) -> Result(Outcome, String) {
   let max_accept_retries = 3
   let max_ke_retries = 3
   case state {
-    InitiatorState(pstate, local, negotiated, secure, waiting, retries, pending) -> {
+    InitiatorState(
+      pstate,
+      local,
+      negotiated,
+      secure,
+      waiting,
+      retries,
+      pending,
+      crypto,
+    ) -> {
       case waiting {
         Some(tag) -> {
           case pending {
@@ -351,6 +492,7 @@ pub fn handshake_on_timeout(state: HandshakeState) -> Result(Outcome, String) {
                           Some("capabilities"),
                           retries + 1,
                           Some(bytes),
+                          crypto,
                         ),
                       ))
                     False -> Ok(Received(None, Failed("capabilities timeout")))
@@ -368,6 +510,7 @@ pub fn handshake_on_timeout(state: HandshakeState) -> Result(Outcome, String) {
                           Some("ke"),
                           retries + 1,
                           Some(bytes),
+                          crypto,
                         ),
                       ))
                     False -> Ok(Received(None, Failed("key exchange timeout")))
@@ -381,7 +524,15 @@ pub fn handshake_on_timeout(state: HandshakeState) -> Result(Outcome, String) {
         None -> Error("nothing waiting")
       }
     }
-    ResponderState(pstate, negotiated, secure, waiting, retries, pending) -> {
+    ResponderState(
+      pstate,
+      negotiated,
+      secure,
+      waiting,
+      retries,
+      pending,
+      crypto,
+    ) -> {
       case waiting {
         Some(tag) -> {
           case pending {
@@ -399,6 +550,7 @@ pub fn handshake_on_timeout(state: HandshakeState) -> Result(Outcome, String) {
                           Some("accept"),
                           retries + 1,
                           Some(bytes),
+                          crypto,
                         ),
                       ))
                     False -> Ok(Received(None, Failed("accept timeout")))
@@ -415,6 +567,7 @@ pub fn handshake_on_timeout(state: HandshakeState) -> Result(Outcome, String) {
                           Some("ke"),
                           retries + 1,
                           Some(bytes),
+                          crypto,
                         ),
                       ))
                     False -> Ok(Received(None, Failed("key exchange timeout")))
