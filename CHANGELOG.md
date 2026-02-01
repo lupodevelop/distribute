@@ -68,10 +68,6 @@ This release introduces **capability negotiation**, **protocol versioning**, **p
 - **Receiver EXIT handling**: Global receiver now properly handles linked process EXIT messages using `process.trap_exits(True)` and `select_trapped_exits`
 - **FFI atom safety**: All FFI modules use safe atom conversion via `distribute_ffi_utils:to_atom_safe/1`
 
-### Test Coverage
-- **Total tests:** 462
-- Test suites cover: crypto adapter (13), retry module (34), negotiation, handshake, registry integration
-
 ### Migration from 2.0.0
 
 ```gleam
