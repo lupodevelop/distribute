@@ -273,3 +273,148 @@ pub fn self_node() -> String {
 pub fn ping(node: String) -> Bool {
   ping_ffi(node)
 }
+
+// =============================================================================
+// Health Check
+// =============================================================================
+
+/// Health status of the cluster from this node's perspective.
+pub type ClusterHealth {
+  ClusterHealth(
+    /// Name of the current node
+    self_node: String,
+    /// Whether this node is running as a distributed node
+    is_distributed: Bool,
+    /// List of currently connected node names
+    connected_nodes: List(String),
+    /// Number of connected nodes
+    connected_count: Int,
+    /// Nodes that were pinged successfully
+    reachable_nodes: List(String),
+    /// Nodes that failed to respond to ping
+    unreachable_nodes: List(String),
+  )
+}
+
+/// Check the health of the cluster.
+///
+/// Returns a `ClusterHealth` record with information about:
+/// - Current node status
+/// - Connected nodes
+/// - Reachability of connected nodes via ping
+///
+/// ## Example
+///
+/// ```gleam
+/// case cluster.health() {
+///   Ok(status) -> {
+///     io.println("Self: " <> status.self_node)
+///     io.println("Connected: " <> int.to_string(status.connected_count))
+///   }
+///   Error(reason) -> io.println("Health check failed: " <> reason)
+/// }
+/// ```
+pub fn health() -> Result(ClusterHealth, String) {
+  let self = self_node()
+
+  // Check if we're running as a distributed node
+  let is_dist = is_distributed()
+
+  case is_dist {
+    False ->
+      Ok(
+        ClusterHealth(
+          self_node: self,
+          is_distributed: False,
+          connected_nodes: [],
+          connected_count: 0,
+          reachable_nodes: [],
+          unreachable_nodes: [],
+        ),
+      )
+    True -> {
+      let connected = nodes()
+      let #(reachable, unreachable) = partition_by_ping(connected)
+
+      Ok(ClusterHealth(
+        self_node: self,
+        is_distributed: True,
+        connected_nodes: connected,
+        connected_count: list_length(connected),
+        reachable_nodes: reachable,
+        unreachable_nodes: unreachable,
+      ))
+    }
+  }
+}
+
+/// Quick health check - returns True if node is distributed and has connections.
+///
+/// Use this for simple health endpoints that just need a boolean.
+///
+/// ## Example
+///
+/// ```gleam
+/// case cluster.is_healthy() {
+///   True -> "OK"
+///   False -> "UNHEALTHY"
+/// }
+/// ```
+pub fn is_healthy() -> Bool {
+  is_distributed() && list_length(nodes()) > 0
+}
+
+/// Check if this node is running as a distributed node.
+///
+/// Returns True if the node was started with a name (e.g., `-name node@host`).
+pub fn is_distributed() -> Bool {
+  self_node() != "nonode@nohost"
+}
+
+/// Get the number of currently connected nodes.
+pub fn connected_count() -> Int {
+  list_length(nodes())
+}
+
+// Helper to partition nodes by ping reachability
+fn partition_by_ping(node_list: List(String)) -> #(List(String), List(String)) {
+  do_partition_by_ping(node_list, [], [])
+}
+
+fn do_partition_by_ping(
+  remaining: List(String),
+  reachable: List(String),
+  unreachable: List(String),
+) -> #(List(String), List(String)) {
+  case remaining {
+    [] -> #(list_reverse(reachable), list_reverse(unreachable))
+    [node, ..rest] ->
+      case ping(node) {
+        True -> do_partition_by_ping(rest, [node, ..reachable], unreachable)
+        False -> do_partition_by_ping(rest, reachable, [node, ..unreachable])
+      }
+  }
+}
+
+// Simple list helpers to avoid importing gleam/list
+fn list_length(l: List(a)) -> Int {
+  do_list_length(l, 0)
+}
+
+fn do_list_length(l: List(a), acc: Int) -> Int {
+  case l {
+    [] -> acc
+    [_, ..rest] -> do_list_length(rest, acc + 1)
+  }
+}
+
+fn list_reverse(l: List(a)) -> List(a) {
+  do_list_reverse(l, [])
+}
+
+fn do_list_reverse(l: List(a), acc: List(a)) -> List(a) {
+  case l {
+    [] -> acc
+    [x, ..rest] -> do_list_reverse(rest, [x, ..acc])
+  }
+}
