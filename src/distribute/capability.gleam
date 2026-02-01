@@ -1,3 +1,20 @@
+//// Protocol capability definitions for version negotiation.
+////
+//// Capabilities are exchanged during handshake to ensure nodes can communicate
+//// using compatible protocol versions. Each capability specifies a protocol name
+//// and a version range (min to max) that the node supports.
+////
+//// ## Example
+////
+//// ```gleam
+//// import distribute/capability
+////
+//// let caps = [
+////   capability.new("messaging", 1, 3),  // Supports messaging v1-v3
+////   capability.new("crypto", 2, 2),     // Only supports crypto v2
+//// ]
+//// ```
+
 /// Represents a protocol capability with version range.
 /// Used during handshake negotiation to find compatible versions.
 pub type Capability {
