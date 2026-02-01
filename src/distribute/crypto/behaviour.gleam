@@ -87,6 +87,22 @@ pub opaque type SecureContext {
 }
 
 /// Create a new secure context (for provider implementations).
+///
+/// Constructs a `SecureContext` for storing encrypted session state.
+/// This is a simpler version that doesn't include key material - use
+/// `types.new_secure_context` for full context with key material.
+///
+/// ## Arguments
+///
+/// - `node_id` - Remote node this context is for
+/// - `stage` - Current handshake stage
+/// - `created_at_ms` - Creation timestamp
+/// - `key_id` - Unique key identifier (safe to log)
+///
+/// ## Note
+///
+/// This is primarily for the behaviour module's internal use.
+/// Most providers should use `types.new_secure_context` instead.
 pub fn new_secure_context(
   node_id: NodeId,
   stage: HandshakeStage,
@@ -102,16 +118,25 @@ pub fn new_secure_context(
 }
 
 /// Get the node ID from a secure context.
+///
+/// Returns the identifier of the remote node this secure context
+/// was established with during handshake.
 pub fn context_node_id(ctx: SecureContext) -> NodeId {
   ctx.node_id
 }
 
 /// Get the handshake stage from a secure context.
+///
+/// Returns the current state of the security handshake. Should be
+/// `SecureEstablished` before using the context for encryption.
 pub fn context_stage(ctx: SecureContext) -> HandshakeStage {
   ctx.stage
 }
 
 /// Get the key ID from a secure context.
+///
+/// Returns a unique identifier for the current encryption key.
+/// Safe to log for debugging; changes after each rekey operation.
 pub fn context_key_id(ctx: SecureContext) -> String {
   ctx.key_id
 }
@@ -130,6 +155,15 @@ pub opaque type HandshakeState {
 }
 
 /// Create a new handshake state (for provider implementations).
+///
+/// Constructs intermediate state for tracking an in-progress handshake.
+/// Used internally by providers to maintain state between handshake steps.
+///
+/// ## Arguments
+///
+/// - `local_node` - Local node identifier
+/// - `remote_node` - Remote node identifier  
+/// - `stage` - Current handshake stage
 pub fn new_handshake_state(
   local_node: NodeId,
   remote_node: NodeId,
@@ -144,11 +178,17 @@ pub fn new_handshake_state(
 }
 
 /// Get the stage from handshake state.
+///
+/// Returns the current stage of the handshake process. Use to determine
+/// if the handshake needs more message exchanges or has completed.
 pub fn handshake_stage(state: HandshakeState) -> HandshakeStage {
   state.stage
 }
 
 /// Get the remote node from handshake state.
+///
+/// Returns the identifier of the remote node this handshake is
+/// being conducted with.
 pub fn handshake_remote_node(state: HandshakeState) -> NodeId {
   state.remote_node
 }
@@ -225,6 +265,9 @@ pub type CryptoError {
 }
 
 /// Check if an error is transient and should be retried.
+///
+/// Returns `True` for errors that are temporary and may succeed
+/// on retry (e.g., network issues, timeouts).
 pub fn is_transient_error(error: CryptoError) -> Bool {
   case error {
     TransientNetwork(_) -> True
@@ -234,6 +277,9 @@ pub fn is_transient_error(error: CryptoError) -> Bool {
 }
 
 /// Check if an error is permanent and should not be retried.
+///
+/// Returns `True` for errors that indicate a fundamental problem
+/// that won't be resolved by retrying (e.g., authentication failure).
 pub fn is_permanent_error(error: CryptoError) -> Bool {
   case error {
     InvalidSignature -> True
