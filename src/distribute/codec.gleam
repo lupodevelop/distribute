@@ -350,7 +350,18 @@ pub fn list_decoder_fixed(element_decoder: Decoder(a)) -> Decoder(List(a)) {
 // Envelope: tag + version + payload
 // ---------------------------------------------------------------------------
 
-// Wrap a payload with a small envelope containing a tag and a version.
+/// Wrap a payload with an envelope containing a protocol tag and version.
+/// 
+/// The envelope format is: `[tag_len:16][tag:utf8][version:32][payload]`
+/// 
+/// This enables protocol mismatch detection and versioned message handling.
+/// 
+/// ## Example
+/// 
+/// ```gleam
+/// let payload = codec.encode(codec.string_encoder(), "hello")
+/// let envelope = codec.wrap_envelope("my_protocol", 1, payload |> result.unwrap(<<>>))
+/// ```
 pub fn wrap_envelope(tag: String, version: Int, payload: BitArray) -> BitArray {
   let tag_bytes = bit_array.from_string(tag)
   let tag_len = bit_array.byte_size(tag_bytes)
@@ -362,7 +373,18 @@ pub fn wrap_envelope(tag: String, version: Int, payload: BitArray) -> BitArray {
   )
 }
 
-// Unwrap an envelope returning (tag, version, payload) or a DecodeError.
+/// Unwrap an envelope, returning the tag, version, and payload.
+/// 
+/// Returns `DecodeError` if the envelope format is invalid.
+/// 
+/// ## Example
+/// 
+/// ```gleam
+/// case codec.unwrap_envelope(data) {
+///   Ok(#(tag, version, payload)) -> // Process message
+///   Error(e) -> // Handle error
+/// }
+/// ```
 pub fn unwrap_envelope(
   data: BitArray,
 ) -> Result(#(String, Int, BitArray), DecodeError) {
@@ -1048,7 +1070,14 @@ pub fn result_decoder(
 // Tuple codecs
 // ============================================================================
 
-/// Tuple2 encoder with length prefixes for proper boundary tracking.
+/// Encoder for 2-tuples. Encodes both elements with length prefix for first.
+/// 
+/// ## Example
+/// 
+/// ```gleam
+/// let enc = codec.tuple2_encoder(codec.int_encoder(), codec.string_encoder())
+/// let encoded = codec.encode(enc, #(42, "hello"))
+/// ```
 pub fn tuple2_encoder(first: Encoder(a), second: Encoder(b)) -> Encoder(#(a, b)) {
   fn(tuple) {
     let #(a, b) = tuple
@@ -1060,7 +1089,8 @@ pub fn tuple2_encoder(first: Encoder(a), second: Encoder(b)) -> Encoder(#(a, b))
   }
 }
 
-/// Tuple2 sized decoder.
+/// SizedDecoder for 2-tuples. Returns the decoded tuple and remaining bytes.
+/// Use with `to_decoder()` for simple decoding.
 pub fn tuple2_sized_decoder(
   first: SizedDecoder(a),
   second: SizedDecoder(b),
@@ -1094,7 +1124,17 @@ pub fn tuple2_sized_decoder(
   }
 }
 
-/// Tuple2 decoder (simple).
+/// Simple decoder for 2-tuples. Expects to consume most of the input.
+/// 
+/// ## Example
+/// 
+/// ```gleam
+/// let dec = codec.tuple2_decoder(
+///   codec.int_sized_decoder(),
+///   codec.string_sized_decoder()
+/// )
+/// let Ok(#(num, text)) = codec.decode(dec, encoded)
+/// ```
 pub fn tuple2_decoder(
   first: SizedDecoder(a),
   second: SizedDecoder(b),
@@ -1102,7 +1142,7 @@ pub fn tuple2_decoder(
   to_decoder(tuple2_sized_decoder(first, second))
 }
 
-/// Tuple3 encoder.
+/// Encoder for 3-tuples. Encodes all three elements with length prefixes.
 pub fn tuple3_encoder(
   first: Encoder(a),
   second: Encoder(b),

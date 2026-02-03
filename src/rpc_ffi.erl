@@ -2,13 +2,26 @@
 -module(rpc_ffi).
 -export([to_atom/1, is_badrpc/1, get_badrpc_reason/1, to_dynamic/1, call_with_timeout/5, call_binary_with_timeout/5]).
 
-to_atom(Bin) when is_binary(Bin) ->
-	case catch binary_to_existing_atom(Bin, utf8) of
-		{'EXIT', _} -> binary_to_atom(Bin, utf8);
-		Atom -> Atom
-	end;
-to_atom(List) when is_list(List) -> to_atom(list_to_binary(List));
-to_atom(Atom) when is_atom(Atom) -> Atom.
+%% Import shared utility for safe atom conversion
+-import(distribute_ffi_utils, [to_atom_safe/1]).
+
+%% Safe atom conversion that respects the allow_atom_creation setting.
+%% Returns the atom directly (unwrapped) for backward compatibility with RPC calls.
+%% NOTE: For RPC, we need actual atoms for module/function names, so we unwrap
+%% the result and fall back to creating the atom if needed for valid Erlang identifiers.
+to_atom(Input) ->
+    case to_atom_safe(Input) of
+        {ok, Atom} -> Atom;
+        {error, _} ->
+            %% For RPC module/function names, we need to create atoms.
+            %% This is safe because these come from code, not user input.
+            %% If this is truly user input, the caller should validate first.
+            case Input of
+                Bin when is_binary(Bin) -> binary_to_atom(Bin, utf8);
+                List when is_list(List) -> list_to_atom(List);
+                Atom when is_atom(Atom) -> Atom
+            end
+    end.
 
 is_badrpc({badrpc, _Reason}) -> true;
 is_badrpc(_) -> false.

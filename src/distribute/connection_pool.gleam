@@ -40,7 +40,8 @@ pub type PoolError {
 // FFI declarations
 // ============================================================================
 
-type Dynamic
+// Dynamic type for FFI interop
+import gleam/dynamic.{type Dynamic}
 
 @external(erlang, "connection_pool_ffi", "new_pool")
 fn new_pool_ffi(target_node: String, max_connections: Int) -> Dynamic

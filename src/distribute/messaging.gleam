@@ -7,6 +7,9 @@
 /// across the cluster.
 import distribute/codec
 import distribute/log
+import distribute/transport
+import distribute/transport/adapter
+import distribute/transport/types as transport_types
 import gleam/erlang/process.{type Pid, type Subject}
 import gleam/list
 import gleam/string
@@ -26,16 +29,14 @@ pub type SendError {
   SendFailed(String)
 }
 
-type Dynamic
+// Dynamic type for FFI interop - used internally for untyped Erlang returns
+import gleam/dynamic.{type Dynamic}
 
 @external(erlang, "erlang", "send")
 fn send_ffi(pid: Pid, msg: a) -> a
 
 @external(erlang, "messaging_ffi", "send_global")
 fn send_global_ffi(name: String, msg: a) -> Dynamic
-
-@external(erlang, "messaging_ffi", "send_binary_global")
-fn send_binary_global_ffi(name: String, binary_msg: BitArray) -> Dynamic
 
 @external(erlang, "messaging_ffi", "is_ok_atom")
 fn is_ok_atom(value: Dynamic) -> Bool
@@ -190,34 +191,41 @@ pub fn send_global_typed(
   log.debug("Sending typed message to global name", [#("name", name)])
   case codec.encode(encoder, msg) {
     Ok(binary_msg) -> {
-      let res = send_binary_global_ffi(name, binary_msg)
-      case is_ok_atom(res) {
-        True -> {
-          log.debug("Typed message sent successfully", [#("name", name)])
+      // Use transport layer for sending
+      let opts = adapter.default_send_options()
+      case transport.send(name, binary_msg, opts) {
+        Ok(_) -> {
+          log.debug("Typed message sent successfully via transport", [
+            #("name", name),
+          ])
           Ok(Nil)
         }
-        False ->
-          case is_not_found(res) {
-            True -> {
-              let error = NameNotFound(name)
-              log.warn("Global name not found", [
-                #("name", name),
-                #("error", classify_send_error_to_string(error)),
-              ])
-              Error(error)
-            }
-            False -> {
-              let error = classify_send_error(get_error_reason(res), name)
-              log.error("Failed to send typed message", [
-                #("name", name),
-                #("error", classify_send_error_to_string(error)),
-              ])
-              Error(error)
-            }
-          }
+        Error(err) -> {
+          let error = map_transport_error(err, name)
+          log.error("Failed to send typed message via transport", [
+            #("name", name),
+            #("error", classify_send_error_to_string(error)),
+          ])
+          Error(error)
+        }
       }
     }
     Error(encode_error) -> Error(EncodeFailed(encode_error))
+  }
+}
+
+fn map_transport_error(
+  err: transport_types.SendError,
+  name: String,
+) -> SendError {
+  case err {
+    transport_types.InvalidPeer(_) -> NameNotFound(name)
+    transport_types.ConnectionClosed(reason) -> NetworkError(reason)
+    transport_types.Timeout(_) -> NetworkError("timeout")
+    transport_types.PayloadTooLarge(_, _) -> InvalidMessage("payload too large")
+    transport_types.SerializationError(reason) -> InvalidMessage(reason)
+    transport_types.Backpressure(_) -> SendFailed("backpressure")
+    transport_types.AdapterFailure(reason) -> SendFailed(reason)
   }
 }
 

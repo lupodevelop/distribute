@@ -6,8 +6,8 @@ import distribute/settings
 import gleam/list
 import gleam/option
 
-// Dynamic type used for ad-hoc FFI returns
-type Dynamic
+// Dynamic type for FFI interop
+import gleam/dynamic.{type Dynamic}
 
 import gleam/string
 
@@ -242,6 +242,8 @@ fn output_log_entry(entry: LogEntry) -> Nil {
     option.None -> meta_str
   }
   logger_ffi_log(level_to_name(level), formatted <> "\n", meta_with_corr)
+  // For tests: store the last formatted log entry in persistent term
+  set_persistent_term_str("distribute_last_log", formatted)
 }
 
 fn level_to_name(level: Level) -> String {
@@ -359,6 +361,27 @@ fn set_persistent_term(key: String, value: Bool) -> Nil
 
 @external(erlang, "persistent_term", "get")
 fn get_persistent_term(key: String, default: Bool) -> Bool
+
+// String variants for tests and lightweight state
+@external(erlang, "persistent_term", "put")
+fn set_persistent_term_str(key: String, value: String) -> Nil
+
+@external(erlang, "persistent_term", "get")
+fn get_persistent_term_str(key: String, default: String) -> String
+
+/// Retrieve the last formatted log entry (test helper)
+pub fn last_log_entry_for_test() -> option.Option(String) {
+  let v = get_persistent_term_str("distribute_last_log", "")
+  case v {
+    "" -> option.None
+    _ -> option.Some(v)
+  }
+}
+
+/// Clear the last formatted log entry (test helper)
+pub fn clear_last_log_entry_for_test() -> Nil {
+  set_persistent_term_str("distribute_last_log", "")
+}
 
 @external(erlang, "persistent_term", "put")
 fn set_persistent_term_level(key: String, value: Int) -> Nil

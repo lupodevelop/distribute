@@ -3,6 +3,9 @@
 -export([start_node/2, connect/1, nodes/0, self_node/0, ping/1,
          is_ok_atom/1, get_error_reason/1, is_true/1, is_false/1, is_ignored/1]).
 
+%% Import shared utility for safe atom conversion
+-import(distribute_ffi_utils, [to_atom_safe/1]).
+
 %% start_node(NameListOrBinary, CookieListOrBinary) -> ok | {error, Reason}
 start_node(Name, Cookie) ->
     NameAtom = to_atom_force(Name),
@@ -68,20 +71,7 @@ is_false(_) -> false.
 is_ignored(ignored) -> true;
 is_ignored(_) -> false.
 
-%% Internal helpers
-to_atom_safe(Bin) when is_list(Bin) -> to_atom_safe(list_to_binary(Bin));
-to_atom_safe(Bin) when is_binary(Bin) -> 
-    Allow = persistent_term:get(distribute_allow_atom_creation, false),
-    case catch binary_to_existing_atom(Bin, utf8) of
-        {'EXIT', _} -> case Allow of
-                           true -> {ok, binary_to_atom(Bin, utf8)};
-                           false -> {error, <<"atom_not_existing">>} 
-                       end;
-        Atom -> {ok, Atom}
-    end;
-to_atom_safe(Atom) when is_atom(Atom) -> {ok, Atom};
-to_atom_safe(_) -> {error, <<"badarg">>}.
-
+%% Internal: force atom creation (for node names from trusted config)
 to_atom_force(Bin) when is_binary(Bin) -> binary_to_atom(Bin, utf8);
 to_atom_force(Bin) when is_list(Bin) -> list_to_atom(Bin);
 to_atom_force(Atom) when is_atom(Atom) -> Atom.

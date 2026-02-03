@@ -6,11 +6,27 @@
 /// When a process is registered globally, it can be looked up by name from any
 /// node in the cluster. If a network partition occurs, the registry will
 /// eventually resolve conflicts when the partition heals.
+///
+/// ## Retry with Backoff
+///
+/// For distributed environments with transient connectivity issues, use
+/// `register_with_strategy` with exponential backoff and jitter:
+///
+/// ```gleam
+/// import distribute/registry
+/// import distribute/retry
+///
+/// // Recommended: exponential backoff with jitter
+/// let policy = retry.default_with_jitter()
+/// registry.register_with_strategy(subject, "my-service", policy)
+/// ```
 import distribute/codec
 import distribute/global
 import distribute/log
+import distribute/retry
 import gleam/dynamic.{type Dynamic}
 import gleam/erlang/process
+import gleam/int
 import gleam/string
 
 /// Re-export Pid from gleam/erlang/process for API compatibility.
@@ -54,6 +70,15 @@ fn is_pid(value: Dynamic) -> Bool
 
 @external(erlang, "registry_ffi", "dynamic_to_pid")
 fn dynamic_to_pid(value: Dynamic) -> Pid
+
+@external(erlang, "registry_ffi", "store_subject")
+fn store_subject_ffi(name: String, subject: process.Subject(msg)) -> Dynamic
+
+@external(erlang, "registry_ffi", "get_subject")
+fn get_subject_ffi(name: String) -> Dynamic
+
+@external(erlang, "registry_ffi", "remove_subject")
+fn remove_subject_ffi(name: String) -> Dynamic
 
 /// Classify error reason into structured RegisterError
 fn classify_register_error(reason: String) -> RegisterError {
@@ -233,3 +258,333 @@ pub fn whereis_with_tag(
 pub fn whereis_typed(name: String) -> Result(process.Subject(msg), Nil) {
   whereis_with_tag(name, dynamic.nil())
 }
+
+// ============================================================================
+// Subject Storage API
+// ============================================================================
+// These functions store/retrieve complete Subject values (including their tag)
+// using persistent_term. This is necessary for OTP actors where the tag must
+// be preserved for message routing to work correctly.
+
+/// Store a complete Subject by name.
+///
+/// Unlike `register_typed` which only stores the Pid in Erlang's global registry,
+/// this function stores the entire Subject including its unique tag. This is
+/// essential for OTP actors where the tag is used for message pattern matching.
+///
+/// Use this when you need to retrieve the exact same Subject later, for example
+/// when implementing singleton actors that need to be looked up by name.
+///
+/// The Subject is stored using `persistent_term` which is optimized for
+/// read-heavy, rarely-changing data.
+pub fn store_subject(
+  name: String,
+  subject: process.Subject(msg),
+) -> Result(Nil, RegisterError) {
+  case validate_name(name) {
+    Error(e) -> Error(e)
+    Ok(_) -> {
+      let _ = store_subject_ffi(name, subject)
+      Ok(Nil)
+    }
+  }
+}
+
+/// Retrieve a stored Subject by name.
+///
+/// Returns the exact Subject that was stored with `store_subject`, preserving
+/// the original tag. This allows proper message routing for OTP actors.
+///
+/// Returns Error(Nil) if no Subject is stored under this name.
+pub fn lookup_subject(name: String) -> Result(process.Subject(msg), Nil) {
+  let result = get_subject_ffi(name)
+  case is_ok_tuple(result) {
+    True -> Ok(extract_subject(result))
+    False -> Error(Nil)
+  }
+}
+
+/// Remove a stored Subject by name.
+///
+/// This removes the Subject from persistent_term storage. Note that this
+/// does NOT unregister the process from Erlang's global registry - use
+/// `unregister` for that.
+pub fn remove_stored_subject(name: String) -> Nil {
+  let _ = remove_subject_ffi(name)
+  Nil
+}
+
+@external(erlang, "registry_ffi", "is_ok_tuple")
+fn is_ok_tuple(value: Dynamic) -> Bool
+
+@external(erlang, "registry_ffi", "extract_subject")
+fn extract_subject(value: Dynamic) -> process.Subject(msg)
+
+// ============================================================================
+// Convenience Wrappers for Common Patterns
+// ============================================================================
+
+/// Try to register a GlobalSubject, automatically extracting its underlying Subject.
+///
+/// This is a convenience wrapper that combines the most common pattern:
+/// 1. Extract the Subject(BitArray) from GlobalSubject
+/// 2. Register it using register_typed
+///
+/// **Example:**
+/// ```gleam
+/// let global_subject = actor.start_typed_actor(init, loop, encoder, decoder)
+/// register_global(global_subject, "my-service")
+/// ```
+pub fn register_global(
+  global_subject: global.GlobalSubject(msg),
+  name: String,
+) -> Result(Nil, RegisterError) {
+  register_typed(name, global.subject(global_subject))
+}
+
+/// Synchronous registration with retry logic and exponential backoff.
+///
+/// Attempts to register a GlobalSubject using the provided retry policy.
+/// This is the recommended method for production use as it supports
+/// exponential backoff and jitter to prevent thundering herd problems.
+///
+/// **Parameters:**
+/// - `global_subject`: The GlobalSubject to register
+/// - `name`: The global name to register under
+/// - `policy`: Retry policy with backoff configuration
+///
+/// **Example:**
+/// ```gleam
+/// import distribute/retry
+///
+/// // Recommended: exponential backoff with jitter
+/// let policy = retry.default_with_jitter()
+/// registry.register_with_strategy(subject, "my-service", policy)
+///
+/// // Custom policy for critical services
+/// let critical_policy = retry.aggressive()
+///   |> retry.with_max_attempts(10)
+/// registry.register_with_strategy(subject, "critical-service", critical_policy)
+/// ```
+///
+/// Returns Ok(Nil) on success, Error(RegisterError) if all retries fail.
+pub fn register_with_strategy(
+  global_subject: global.GlobalSubject(msg),
+  name: String,
+  policy: retry.RetryPolicy,
+) -> Result(Nil, RegisterError) {
+  do_register_with_strategy(global_subject, name, policy, 1)
+}
+
+fn do_register_with_strategy(
+  global_subject: global.GlobalSubject(msg),
+  name: String,
+  policy: retry.RetryPolicy,
+  attempt: Int,
+) -> Result(Nil, RegisterError) {
+  case register_global(global_subject, name) {
+    Ok(Nil) -> {
+      case attempt > 1 {
+        True ->
+          log.info("Registration succeeded after retries", [
+            #("name", name),
+            #("total_attempts", int.to_string(attempt)),
+          ])
+        False -> Nil
+      }
+      Ok(Nil)
+    }
+    Error(NetworkError(reason)) -> {
+      // Check if we should retry (guards can't call functions)
+      case retry.should_retry(policy, attempt) {
+        True -> {
+          let delay_result = retry.calculate_delay(policy, attempt)
+          log.warn("Registration attempt failed, retrying with backoff...", [
+            #("name", name),
+            #("attempt", int.to_string(attempt)),
+            #("max_attempts", int.to_string(retry.total_attempts(policy))),
+            #("delay_ms", int.to_string(delay_result.delay_ms)),
+            #("base_delay_ms", int.to_string(delay_result.base_delay_ms)),
+            #("reason", reason),
+          ])
+          process.sleep(delay_result.delay_ms)
+          do_register_with_strategy(global_subject, name, policy, attempt + 1)
+        }
+        False -> {
+          log.error("Registration failed after max retries", [
+            #("name", name),
+            #("attempt", int.to_string(attempt)),
+            #("reason", reason),
+          ])
+          Error(NetworkError(reason))
+        }
+      }
+    }
+    Error(err) -> {
+      log.error("Registration failed permanently", [
+        #("name", name),
+        #("attempt", int.to_string(attempt)),
+        #("error", classify_register_error_to_string(err)),
+      ])
+      Error(err)
+    }
+  }
+}
+
+/// Synchronous registration with simple retry logic.
+///
+/// **DEPRECATED:** Use `register_with_strategy` with a retry policy instead.
+/// This function uses fixed delays which can cause thundering herd problems.
+///
+/// Attempts to register a GlobalSubject, retrying up to `max_retries` times
+/// if network errors occur. Useful in distributed environments with transient
+/// connectivity issues.
+///
+/// **Parameters:**
+/// - `global_subject`: The GlobalSubject to register
+/// - `name`: The global name to register under
+/// - `max_retries`: Maximum number of retry attempts (default: 3)
+/// - `retry_delay_ms`: Delay between retries in milliseconds (default: 100)
+///
+/// Returns Ok(Nil) on success, Error(RegisterError) if all retries fail.
+@deprecated("Use register_with_strategy with retry.RetryPolicy instead")
+pub fn register_with_retry(
+  global_subject: global.GlobalSubject(msg),
+  name: String,
+  max_retries: Int,
+  retry_delay_ms: Int,
+) -> Result(Nil, RegisterError) {
+  // Convert legacy parameters to policy for backward compatibility
+  let policy =
+    retry.default()
+    |> retry.with_max_attempts(max_retries + 1)
+    |> retry.with_base_delay_ms(retry_delay_ms)
+    |> retry.with_max_delay_ms(retry_delay_ms)
+    |> retry.with_jitter(retry.NoJitter)
+
+  do_register_with_strategy(global_subject, name, policy, 1)
+}
+
+/// Lookup a GlobalSubject by name (async-friendly version).
+///
+/// This is a convenience wrapper that simplifies the common pattern of
+/// looking up a GlobalSubject with encoder/decoder.
+///
+/// **Example:**
+/// ```gleam
+/// case lookup_global("my-service", my_encoder(), my_decoder()) {
+///   Ok(service) -> global.send(service, MyMessage)
+///   Error(_) -> io.println("Service not found")
+/// }
+/// ```
+pub fn lookup_global(
+  name: String,
+  encoder: codec.Encoder(msg),
+  decoder: codec.Decoder(msg),
+) -> Result(global.GlobalSubject(msg), Nil) {
+  whereis_global(name, encoder, decoder)
+}
+
+/// Synchronous lookup with timeout.
+///
+/// Attempts to lookup a GlobalSubject, retrying until found or timeout.
+/// Useful when waiting for a service to become available.
+///
+/// **Parameters:**
+/// - `name`: The global name to lookup
+/// - `encoder`: Encoder for the message type
+/// - `decoder`: Decoder for the message type
+/// - `timeout_ms`: Maximum time to wait in milliseconds
+/// - `poll_interval_ms`: Time between lookup attempts in milliseconds
+///
+/// Returns Ok(GlobalSubject) if found, Error(Nil) on timeout.
+pub fn lookup_with_timeout(
+  name: String,
+  encoder: codec.Encoder(msg),
+  decoder: codec.Decoder(msg),
+  timeout_ms: Int,
+  poll_interval_ms: Int,
+) -> Result(global.GlobalSubject(msg), Nil) {
+  let start_time = erlang_system_time_ms()
+  do_lookup_with_timeout(
+    name,
+    encoder,
+    decoder,
+    start_time,
+    timeout_ms,
+    poll_interval_ms,
+  )
+}
+
+fn do_lookup_with_timeout(
+  name: String,
+  encoder: codec.Encoder(msg),
+  decoder: codec.Decoder(msg),
+  start_time: Int,
+  timeout_ms: Int,
+  poll_interval_ms: Int,
+) -> Result(global.GlobalSubject(msg), Nil) {
+  case lookup_global(name, encoder, decoder) {
+    Ok(subject) -> Ok(subject)
+    Error(_) -> {
+      let elapsed = erlang_system_time_ms() - start_time
+      case elapsed >= timeout_ms {
+        True -> {
+          log.warn("Lookup timeout exceeded", [
+            #("name", name),
+            #("timeout_ms", int.to_string(timeout_ms)),
+          ])
+          Error(Nil)
+        }
+        False -> {
+          process.sleep(poll_interval_ms)
+          do_lookup_with_timeout(
+            name,
+            encoder,
+            decoder,
+            start_time,
+            timeout_ms,
+            poll_interval_ms,
+          )
+        }
+      }
+    }
+  }
+}
+
+/// Check if a name is currently registered.
+///
+/// This is more efficient than whereis when you only need to check
+/// existence without creating a Subject.
+pub fn is_registered(name: String) -> Bool {
+  case whereis(name) {
+    Ok(_) -> True
+    Error(_) -> False
+  }
+}
+
+/// Unregister and remove stored subject in one call.
+///
+/// Convenience wrapper that combines:
+/// 1. Unregister from global registry
+/// 2. Remove from persistent_term storage
+///
+/// Useful for complete cleanup of a named actor.
+pub fn unregister_and_remove(name: String) -> Result(Nil, RegisterError) {
+  let _ = remove_stored_subject(name)
+  unregister(name)
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+@external(erlang, "erlang", "system_time")
+fn erlang_system_time(unit: Dynamic) -> Int
+
+fn erlang_system_time_ms() -> Int {
+  erlang_system_time(millisecond_atom())
+}
+
+@external(erlang, "registry_ffi", "millisecond_atom")
+fn millisecond_atom() -> Dynamic

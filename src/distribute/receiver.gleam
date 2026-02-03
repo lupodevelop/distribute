@@ -2,11 +2,16 @@
 ///
 /// This module provides utilities for receiving and decoding messages using
 /// the codec system, integrating seamlessly with gleam/erlang/process selectors.
-import distribute/codec.{type DecodeError, type Decoder}
+import distribute/codec.{type DecodeError, type Decoder, type Encoder}
+import distribute/global
+import distribute/log
 import gleam/dynamic as dyn
-import gleam/erlang/process.{type Selector, type Subject}
+import gleam/erlang/process.{
+  type Selector, type Subject, Abnormal, Killed, Normal,
+}
 import gleam/otp/actor
 import gleam/result
+import gleam/string
 
 /// Errors that can occur when receiving messages.
 pub type ReceiveError {
@@ -159,6 +164,14 @@ pub type Next(state) {
   StopAbnormal(reason: String)
 }
 
+// Internal inbox type used by the global receiver selector to unify
+// normal message payloads and trapped EXIT messages from linked processes.
+// Defined at module scope so it can be used by the loop implementation.
+type Inbox {
+  Message(BitArray)
+  Exit(process.ExitMessage)
+}
+
 /// Start an actor that receives and decodes typed messages.
 ///
 /// This is a convenience wrapper around `actor.start` that handles binary
@@ -216,6 +229,9 @@ pub fn start_global_receiver(
 ) -> Subject(BitArray) {
   let pid =
     process.spawn(fn() {
+      // Ensure exit signals are delivered as messages so we can handle them
+      // gracefully instead of letting the process be killed abruptly.
+      process.trap_exits(True)
       let subject = process.unsafely_create_subject(process.self(), dyn.nil())
       global_loop(initial_state, subject, decoder, handler)
     })
@@ -230,19 +246,91 @@ fn global_loop(
 ) -> Nil {
   let selector =
     process.new_selector()
-    |> process.select_map(subject, fn(msg) { msg })
+    |> process.select_map(subject, fn(msg) { Message(msg) })
+    |> process.select_trapped_exits(fn(exit_msg) { Exit(exit_msg) })
 
-  let binary = process.selector_receive_forever(selector)
-
-  case decoder(binary) {
-    Ok(message) -> {
-      case handler(message, state) {
-        Continue(new_state) -> global_loop(new_state, subject, decoder, handler)
-        Stop -> Nil
-        StopAbnormal(_reason) -> Nil
-        // TODO: Better exit handling
+  case process.selector_receive_forever(selector) {
+    Message(binary) ->
+      case decoder(binary) {
+        Ok(value) -> {
+          case handler(value, state) {
+            Continue(new_state) ->
+              global_loop(new_state, subject, decoder, handler)
+            Stop -> Nil
+            StopAbnormal(_reason) -> Nil
+          }
+        }
+        Error(_) -> global_loop(state, subject, decoder, handler)
       }
+
+    Exit(process.ExitMessage(pid, reason)) -> {
+      // Translate exit reason into a string for logging and diagnostics.
+      let reason_str = case reason {
+        Normal -> "normal"
+        Killed -> "killed"
+        Abnormal(r) -> string.inspect(r)
+      }
+
+      // Log at warning level so operators can observe abnormal terminations.
+      log.warn("Linked process exited, shutting down receiver", [
+        #("pid", string.inspect(pid)),
+        #("reason", reason_str),
+      ])
+
+      // Stop the loop: treat a Normal exit as a graceful stop and others as abnormal.
+      Nil
     }
-    Error(_) -> global_loop(state, subject, decoder, handler)
   }
+}
+
+/// Start a typed actor that returns a GlobalSubject (RECOMMENDED).
+///
+/// This is the recommended way to create type-safe actors for distributed use.
+/// The returned `GlobalSubject` enforces encoder/decoder usage and can be
+/// registered globally with `registry.register_typed`.
+///
+/// Malformed messages are silently ignored.
+///
+/// ## Parameters
+///
+/// - `initial_state`: The initial state of the actor.
+/// - `encoder`: The encoder for outgoing messages (used by clients).
+/// - `decoder`: The decoder for incoming messages.
+/// - `handler`: The message handler function returning `Next(state)`.
+///
+/// ## Returns
+///
+/// A `GlobalSubject(msg)` that can be used for type-safe messaging.
+///
+/// ## Example
+///
+/// ```gleam
+/// pub type Request {
+///   GetCount
+///   Increment
+/// }
+///
+/// let actor = receiver.start_typed_actor(
+///   0,
+///   my_encoder(),
+///   my_decoder(),
+///   fn(msg, count) {
+///     case msg {
+///       GetCount -> {
+///         // Send response logic here
+///         receiver.Continue(count)
+///       }
+///       Increment -> receiver.Continue(count + 1)
+///     }
+///   },
+/// )
+/// ```
+pub fn start_typed_actor(
+  initial_state: state,
+  encoder: Encoder(msg),
+  decoder: Decoder(msg),
+  handler: fn(msg, state) -> Next(state),
+) -> global.GlobalSubject(msg) {
+  let subject = start_global_receiver(initial_state, decoder, handler)
+  global.from_subject(subject, encoder, decoder)
 }
