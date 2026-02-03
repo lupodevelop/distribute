@@ -6,3 +6,5 @@ erl_crash.dump
 *.log
 /dev
 todo.md
+.github/workflows/ci.yml
+docs/crypto/security.md
