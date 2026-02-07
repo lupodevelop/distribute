@@ -13,6 +13,7 @@
 /// 2. Receiver merges the incoming view with its local state
 /// 3. Merge rules: higher incarnation wins; on tie, alive > suspect > dead
 import gleam/list
+import gleam/order
 
 /// Represents the status of a node in the cluster.
 pub type NodeStatus {
@@ -108,7 +109,27 @@ pub fn merge_single(entry: GossipEntry) -> Nil {
   )
 }
 
-/// Pick random peers from a list of nodes.
+/// Pick random peers from a list of nodes using Fisher-Yates shuffle.
+///
+/// Selects `count` nodes uniformly at random from the input list.
+/// Essential for gossip protocol convergence.
 pub fn pick_random_peers(nodes: List(String), count: Int) -> List(String) {
-  list.take(nodes, count)
+  // Shuffle by assigning each element a random sort key, then take first N
+  nodes
+  |> list.map(fn(n) { #(do_uniform(1_000_000), n) })
+  |> list.sort(fn(a, b) {
+    case a.0 < b.0 {
+      True -> order.Lt
+      False -> case a.0 == b.0 {
+        True -> order.Eq
+        False -> order.Gt
+      }
+    }
+  })
+  |> list.map(fn(pair) { pair.1 })
+  |> list.take(count)
 }
+
+/// Erlang's rand:uniform/1 returns 1..N
+@external(erlang, "rand", "uniform")
+fn do_uniform(n: Int) -> Int
