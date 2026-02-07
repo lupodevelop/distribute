@@ -14,6 +14,10 @@ import gleam/erlang/process.{type Pid, type Subject}
 import gleam/list
 import gleam/string
 
+/// Errors that can occur when sending a message to a remote process.
+///
+/// Each variant captures the reason for the failure, enabling callers
+/// to decide how to handle different error scenarios (retry, log, escalate).
 pub type SendError {
   /// The globally registered name was not found.
   NameNotFound(String)
@@ -48,6 +52,9 @@ fn is_not_found(value: Dynamic) -> Bool
 fn get_error_reason(value: Dynamic) -> String
 
 /// Classify error reason into structured SendError
+///
+/// ⚠️ **Internal** — This function is exposed for testing purposes only.
+/// It is not part of the public API contract and may change without notice.
 pub fn classify_send_error(reason: String, name: String) -> SendError {
   case reason {
     "not_found" -> NameNotFound(name)
@@ -62,6 +69,9 @@ pub fn classify_send_error(reason: String, name: String) -> SendError {
 }
 
 /// Convert encode error to send error
+///
+/// ⚠️ **Internal** — This function is exposed for testing purposes only.
+/// It is not part of the public API contract and may change without notice.
 pub fn encode_error_to_send_error(error: codec.EncodeError) -> SendError {
   EncodeFailed(error)
 }
@@ -79,6 +89,9 @@ pub fn classify_send_error_to_string(error: SendError) -> String {
 }
 
 /// Check if error is network-related
+///
+/// ⚠️ **Internal** — This function is exposed for testing purposes only.
+/// It is not part of the public API contract and may change without notice.
 pub fn is_network_error(reason: String) -> Bool {
   string.contains(reason, "network")
   || string.contains(reason, "connection")
