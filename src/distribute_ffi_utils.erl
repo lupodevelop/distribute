@@ -33,8 +33,13 @@
 -module(distribute_ffi_utils).
 -export([
     to_atom_safe/1,
-    get_allow_atom_creation/0
+    get_allow_atom_creation/0,
+    dynamic_nil/0
 ]).
+
+%% @doc Return nil as a dynamic value (for test helpers).
+-spec dynamic_nil() -> term().
+dynamic_nil() -> nil.
 
 %% @doc Safely convert a binary, list, or atom to an atom.
 %%
