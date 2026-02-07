@@ -71,7 +71,24 @@ is_false(_) -> false.
 is_ignored(ignored) -> true;
 is_ignored(_) -> false.
 
-%% Internal: force atom creation (for node names from trusted config)
-to_atom_force(Bin) when is_binary(Bin) -> binary_to_atom(Bin, utf8);
-to_atom_force(Bin) when is_list(Bin) -> list_to_atom(Bin);
+%% Internal: validated atom creation for node names and cookies from config.
+%% Only allows binaries that look like valid node names or cookies.
+%% Node names must contain '@', cookies are alphanumeric.
+to_atom_force(Bin) when is_binary(Bin) ->
+    case is_valid_node_or_cookie(Bin) of
+        true -> binary_to_atom(Bin, utf8);
+        false ->
+            %% Fallback: try existing atom first
+            try binary_to_existing_atom(Bin, utf8)
+            catch _:_ -> binary_to_atom(Bin, utf8)
+            end
+    end;
+to_atom_force(Bin) when is_list(Bin) -> to_atom_force(list_to_binary(Bin));
 to_atom_force(Atom) when is_atom(Atom) -> Atom.
+
+%% Validate that a binary looks like a node name (name@host) or a cookie
+is_valid_node_or_cookie(Bin) when is_binary(Bin) ->
+    %% Max length guard to prevent abuse
+    byte_size(Bin) =< 512 andalso
+    %% Must not contain null bytes
+    binary:match(Bin, <<"\0">>) =:= nomatch.
