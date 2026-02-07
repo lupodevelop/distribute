@@ -5,6 +5,7 @@
 import distribute/cluster
 import distribute/log
 import distribute/transport
+import gleam/int
 import gleam/list
 import gleam/option
 import gleam/string
@@ -71,7 +72,7 @@ pub fn with_auto_register(builder: NodeBuilder) -> NodeBuilder {
 pub fn start(builder: NodeBuilder) -> Result(NodeResult, cluster.StartError) {
   log.info("Starting distributed node with builder", [
     #("has_name", bool_to_string(option.is_some(builder.name))),
-    #("peer_count", int_to_string(list.length(builder.peers))),
+    #("peer_count", int.to_string(list.length(builder.peers))),
     #("auto_register", bool_to_string(builder.auto_register_services)),
   ])
 
@@ -87,7 +88,7 @@ pub fn start(builder: NodeBuilder) -> Result(NodeResult, cluster.StartError) {
             #("node", valid_config.name),
             #(
               "connections",
-              int_to_string(list.length(start_result.connections)),
+              int.to_string(list.length(start_result.connections)),
             ),
           ])
 
@@ -237,20 +238,6 @@ fn bool_to_string(b: Bool) -> String {
   case b {
     True -> "true"
     False -> "false"
-  }
-}
-
-fn int_to_string(i: Int) -> String {
-  // Simple implementation - in real Gleam this would use the int module
-  case i {
-    0 -> "0"
-    1 -> "1"
-    2 -> "2"
-    3 -> "3"
-    4 -> "4"
-    5 -> "5"
-    _ -> "N"
-    // Placeholder for larger numbers
   }
 }
 // ============================================================================
