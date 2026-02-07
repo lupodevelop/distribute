@@ -18,7 +18,12 @@
 /// Represents a protocol capability with version range.
 /// Used during handshake negotiation to find compatible versions.
 pub type Capability {
-  Capability(protocol: String, min: Int, max: Int)
+  Capability(
+    protocol: String,
+    min: Int,
+    max: Int,
+    meta: List(#(String, String)),
+  )
 }
 
 /// A list of capabilities supported by a node.
@@ -27,7 +32,17 @@ pub type NodeCapabilities =
 
 /// Create a new capability with protocol name and version range.
 pub fn new(protocol: String, min: Int, max: Int) -> Capability {
-  Capability(protocol, min, max)
+  Capability(protocol, min, max, [])
+}
+
+/// Create a new capability with protocol name, version range, and metadata.
+pub fn new_with_meta(
+  protocol: String,
+  min: Int,
+  max: Int,
+  meta: List(#(String, String)),
+) -> Capability {
+  Capability(protocol, min, max, meta)
 }
 
 /// Create a new capability with protocol name and version range.
