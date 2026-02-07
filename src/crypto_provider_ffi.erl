@@ -12,6 +12,9 @@
     get_persistent_term/1
 ]).
 
+%% Import shared utility for safe atom conversion
+-import(distribute_ffi_utils, [to_atom_safe/1]).
+
 %% @doc Wrap a Gleam Subject for storage as Dynamic.
 %% This preserves the Subject structure for later retrieval.
 -spec wrap_subject(term()) -> term().
@@ -30,22 +33,26 @@ unwrap_subject(_) ->
 %% This allows lookup of the crypto provider by name.
 -spec register_process_by_name(pid(), binary()) -> {ok, nil} | {error, term()}.
 register_process_by_name(Pid, NameBin) when is_binary(NameBin) ->
-    Name = binary_to_atom(NameBin, utf8),
-    try
-        case whereis(Name) of
-            undefined ->
-                true = register(Name, Pid),
-                {ok, nil};
-            Pid ->
-                % Already registered with same pid
-                {ok, nil};
-            _OtherPid ->
-                % Already registered with different pid
-                {error, {already_registered, Name}}
-        end
-    catch
-        _:Reason ->
-            {error, Reason}
+    case to_atom_safe(NameBin) of
+        {ok, Name} ->
+            try
+                case whereis(Name) of
+                    undefined ->
+                        true = register(Name, Pid),
+                        {ok, nil};
+                    Pid ->
+                        % Already registered with same pid
+                        {ok, nil};
+                    _OtherPid ->
+                        % Already registered with different pid
+                        {error, {already_registered, Name}}
+                end
+            catch
+                _:Reason ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, {invalid_name, Reason}}
     end;
 register_process_by_name(Pid, Name) when is_atom(Name) ->
     register_process_by_name(Pid, atom_to_binary(Name, utf8)).
