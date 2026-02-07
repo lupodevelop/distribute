@@ -34,6 +34,10 @@ import gleam/string
 pub type Pid =
   process.Pid
 
+/// Errors that can occur when registering a process in the global registry.
+///
+/// Each variant captures a specific failure mode, allowing callers to
+/// decide whether to retry, use a different name, or escalate.
 pub type RegisterError {
   /// Name is already registered by another process.
   AlreadyRegistered
