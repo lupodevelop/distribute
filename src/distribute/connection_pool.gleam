@@ -68,7 +68,13 @@ fn is_ok(value: Dynamic) -> Bool
 fn get_error(value: Dynamic) -> String
 
 @external(erlang, "erlang", "element")
-fn element(index: Int, tuple: Dynamic) -> a
+fn element(index: Int, tuple: Dynamic) -> Dynamic
+
+@external(erlang, "erlang", "element")
+fn element_pool(index: Int, tuple: Dynamic) -> Pool
+
+@external(erlang, "erlang", "element")
+fn element_conn(index: Int, tuple: Dynamic) -> Connection
 
 // ============================================================================
 // Core functions
@@ -230,11 +236,11 @@ pub type BatchResult(e) {
 // ============================================================================
 
 fn unwrap_pool(result: Dynamic) -> Pool {
-  element(2, result)
+  element_pool(2, result)
 }
 
 fn unwrap_connection(result: Dynamic) -> Connection {
-  element(2, result)
+  element_conn(2, result)
 }
 
 fn unwrap_stats_map(result: Dynamic) -> Dynamic {
@@ -253,4 +259,4 @@ fn get_map_int(map: Dynamic, key: String) -> Int {
 }
 
 @external(erlang, "erlang", "binary_to_atom")
-fn string_to_atom(s: String) -> a
+fn string_to_atom(s: String) -> Dynamic
