@@ -214,7 +214,10 @@ fn connect_peers(peers: List(String)) -> List(String) {
   })
 }
 
-/// Register common services
+/// Register common services (logger, monitor, election).
+///
+/// ⚠️ **Planned** — Currently logs registrations but does not start real
+/// service processes. Will be implemented when service supervision is added.
 fn register_common_services() -> List(String) {
   let services = [
     #("logger", "log_service"),
