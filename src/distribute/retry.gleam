@@ -430,23 +430,13 @@ fn random_int(min: Int, max: Int) -> Int {
 @external(erlang, "rand", "uniform")
 fn do_uniform(n: Int) -> Int
 
-/// Float power helper for small integer exponents.
+/// Float power helper using Erlang's math:pow/2.
 fn float_power(base: Float, exponent: Float) -> Float {
-  let exp_int = float_truncate(exponent)
-  case exp_int {
-    0 -> 1.0
-    1 -> base
-    2 -> base *. base
-    3 -> base *. base *. base
-    4 -> base *. base *. base *. base
-    5 -> base *. base *. base *. base *. base
-    6 -> base *. base *. base *. base *. base *. base
-    7 -> base *. base *. base *. base *. base *. base *. base
-    8 -> base *. base *. base *. base *. base *. base *. base *. base
-    // For exponents > 8, cap the growth
-    _ -> base *. base *. base *. base *. base *. base *. base *. base
-  }
+  math_pow(base, exponent)
 }
+
+@external(erlang, "math", "pow")
+fn math_pow(base: Float, exponent: Float) -> Float
 
 /// Truncate float to integer.
 @external(erlang, "erlang", "trunc")
