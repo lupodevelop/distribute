@@ -97,8 +97,10 @@ pub fn join_typed(
   group: String,
   subject: Subject(msg),
 ) -> Result(Nil, GroupError) {
-  let assert Ok(pid) = process.subject_owner(subject)
-  join(group, pid)
+  case process.subject_owner(subject) {
+    Ok(pid) -> join(group, pid)
+    Error(Nil) -> Error(GroupFailed("subject has no owner (process dead)"))
+  }
 }
 
 /// Remove a typed subject from a named group.
@@ -106,8 +108,10 @@ pub fn leave_typed(
   group: String,
   subject: Subject(msg),
 ) -> Result(Nil, GroupError) {
-  let assert Ok(pid) = process.subject_owner(subject)
-  leave(group, pid)
+  case process.subject_owner(subject) {
+    Ok(pid) -> leave(group, pid)
+    Error(Nil) -> Error(GroupFailed("subject has no owner (process dead)"))
+  }
 }
 
 /// Get the list of typed members in a group.
