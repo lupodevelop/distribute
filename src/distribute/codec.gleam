@@ -914,6 +914,11 @@ pub fn any_encoder() -> Encoder(a) {
 @external(erlang, "codec_ffi", "unsafe_coerce")
 fn unsafe_coerce(x: Dynamic) -> a
 
+// SAFETY NOTE: unsafe_coerce is used below for pid_decoder and subject_decoder.
+// These are inherently untyped Erlang values (Pids and Subjects) that cannot be
+// validated at the binary level. The caller MUST ensure type correctness.
+// For type-safe messaging, prefer Schema-based codecs (schema_encode/schema_decode).
+
 /// Encoder for Pids.
 ///
 /// Note: Pids are inherently untyped in Erlang. This encoder uses
