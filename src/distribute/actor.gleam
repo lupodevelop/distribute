@@ -499,20 +499,24 @@ pub fn start_typed_actor_supervised(
   decoder: Decoder(msg),
   handler: fn(msg, state) -> receiver.Next(state),
 ) -> Result(#(process.Pid, global.GlobalSubject(msg)), actor.StartError) {
-  // Create child spec for the typed actor
-  let child_spec =
-    child_spec_typed_actor_typed(initial_state, encoder, decoder, handler)
+  // Start the actor first so we capture its GlobalSubject
+  case start_typed_actor_started(initial_state, encoder, decoder, handler) {
+    Ok(started) -> {
+      let actor_gs = started.data
+      let actor_pid = started.pid
 
-  // Build supervisor with the actor as a child
-  let builder = static_supervisor.new(static_supervisor.OneForOne)
-  let builder = static_supervisor.add(builder, child_spec)
+      // Create a child spec that monitors the already-started actor process.
+      // The worker function simply returns the existing pid/subject so the
+      // supervisor links to the correct process.
+      let child_spec =
+        worker(fn() { Ok(actor.Started(pid: actor_pid, data: actor_gs)) })
 
-  // Start supervisor
-  case static_supervisor.start(builder) {
-    Ok(sup) -> {
-      // Start the actor and get its GlobalSubject
-      case start_typed_actor_started(initial_state, encoder, decoder, handler) {
-        Ok(started) -> Ok(#(sup.pid, started.data))
+      // Build and start supervisor with the actor as a child
+      let builder = static_supervisor.new(static_supervisor.OneForOne)
+      let builder = static_supervisor.add(builder, child_spec)
+
+      case static_supervisor.start(builder) {
+        Ok(sup) -> Ok(#(sup.pid, actor_gs))
         Error(err) -> Error(err)
       }
     }
@@ -572,33 +576,34 @@ pub fn pool_supervisor(
   decoder: Decoder(msg),
   handler: fn(msg, state) -> receiver.Next(state),
 ) -> Result(#(process.Pid, List(global.GlobalSubject(msg))), actor.StartError) {
-  // Create child specs for all workers
-  let child_specs =
+  // Start all workers first and collect their Started results
+  let workers_result =
     list.range(1, pool_size)
     |> list.map(fn(_) {
-      child_spec_typed_actor_typed(initial_state, encoder, decoder, handler)
+      start_typed_actor_started(initial_state, encoder, decoder, handler)
     })
+    |> result.all()
 
-  // Build supervisor with all workers
-  let builder = static_supervisor.new(static_supervisor.OneForOne)
-  let builder_with_children =
-    list.fold(child_specs, builder, fn(acc, spec) {
-      static_supervisor.add(acc, spec)
-    })
-
-  // Start supervisor
-  case static_supervisor.start(builder_with_children) {
-    Ok(sup) -> {
-      // Start all workers and collect their GlobalSubjects
-      let workers_result =
-        list.range(1, pool_size)
-        |> list.map(fn(_) {
-          start_typed_actor_started(initial_state, encoder, decoder, handler)
+  case workers_result {
+    Ok(started_workers) -> {
+      // Create child specs that reference the already-started actor processes
+      let child_specs =
+        list.map(started_workers, fn(started) {
+          worker(fn() {
+            Ok(actor.Started(pid: started.pid, data: started.data))
+          })
         })
-        |> result.all()
 
-      case workers_result {
-        Ok(started_workers) -> {
+      // Build supervisor with all workers as children
+      let builder = static_supervisor.new(static_supervisor.OneForOne)
+      let builder_with_children =
+        list.fold(child_specs, builder, fn(acc, spec) {
+          static_supervisor.add(acc, spec)
+        })
+
+      // Start supervisor
+      case static_supervisor.start(builder_with_children) {
+        Ok(sup) -> {
           let subjects = list.map(started_workers, fn(started) { started.data })
           Ok(#(sup.pid, subjects))
         }
