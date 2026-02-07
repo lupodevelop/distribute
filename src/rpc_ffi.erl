@@ -7,19 +7,22 @@
 
 %% Safe atom conversion that respects the allow_atom_creation setting.
 %% Returns the atom directly (unwrapped) for backward compatibility with RPC calls.
-%% NOTE: For RPC, we need actual atoms for module/function names, so we unwrap
-%% the result and fall back to creating the atom if needed for valid Erlang identifiers.
+%% NOTE: For RPC, module/function names are compile-time constants that should
+%% already exist as atoms. If not, the call is invalid.
+to_atom(Input) when is_atom(Input) -> Input;
 to_atom(Input) ->
     case to_atom_safe(Input) of
         {ok, Atom} -> Atom;
         {error, _} ->
-            %% For RPC module/function names, we need to create atoms.
-            %% This is safe because these come from code, not user input.
-            %% If this is truly user input, the caller should validate first.
-            case Input of
-                Bin when is_binary(Bin) -> binary_to_atom(Bin, utf8);
-                List when is_list(List) -> list_to_atom(List);
-                Atom when is_atom(Atom) -> Atom
+            %% For RPC module/function names, try existing atom only.
+            %% If the atom doesn't exist, the module/function is not loaded.
+            try
+                case Input of
+                    Bin when is_binary(Bin) -> binary_to_existing_atom(Bin, utf8);
+                    List when is_list(List) -> list_to_existing_atom(List)
+                end
+            catch
+                _:_ -> error({invalid_rpc_target, Input})
             end
     end.
 
