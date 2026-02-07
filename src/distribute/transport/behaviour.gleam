@@ -33,6 +33,7 @@
 
 import distribute/capability
 import distribute/codec
+import distribute/retry
 import gleam/dict
 import gleam/option.{type Option}
 
@@ -98,16 +99,10 @@ pub type IncomingMessage =
 
 /// Retry policy for transport operations.
 ///
-/// Controls how failed sends/broadcasts are retried with exponential backoff.
-///
-/// ## Fields
-///
-/// - `max_attempts`: Maximum number of send attempts (1 = no retry)
-/// - `initial_backoff_ms`: Initial backoff duration in milliseconds
-/// - `max_backoff_ms`: Maximum backoff duration (prevents runaway waits)
-pub type RetryPolicy {
-  RetryPolicy(max_attempts: Int, initial_backoff_ms: Int, max_backoff_ms: Int)
-}
+/// Uses `distribute/retry.RetryPolicy` which provides exponential backoff
+/// with jitter strategies. See `distribute/retry` for configuration options.
+pub type TransportRetryPolicy =
+  retry.RetryPolicy
 
 /// Result of a broadcast operation with per-node outcomes.
 ///
@@ -171,11 +166,11 @@ pub type NodeCircuitBreaker {
 /// ## Variants
 ///
 /// - `NoFallback`: Fail immediately if primary fails
-/// - `RetryPrimary`: Only retry on the same transport (uses RetryPolicy)
+/// - `RetryPrimary`: Only retry on the same transport (uses TransportRetryPolicy)
 /// - `FailoverList`: Try transports in order until one succeeds
 pub type FallbackStrategy {
   NoFallback
-  RetryPrimary(RetryPolicy)
+  RetryPrimary(TransportRetryPolicy)
   FailoverList(fallback_transports: List(String))
 }
 
@@ -258,7 +253,7 @@ pub type TransportOpts {
     max_payload_bytes: Option(Int),
     connect_timeout_ms: Option(Int),
     heartbeat_interval_ms: Option(Int),
-    retry_policy: Option(RetryPolicy),
+    retry_policy: Option(TransportRetryPolicy),
     circuit_breaker_policy: Option(CircuitBreakerPolicy),
     fallback_strategy: Option(FallbackStrategy),
     delivery_guarantee: Option(DeliveryGuarantee),
@@ -307,8 +302,9 @@ pub type HealthStatus {
 
 /// Initialize a new transport adapter state.
 ///
-/// This is a stub - actual implementations will have their own initialization.
-/// Following the `crypto/provider` pattern, this provides a minimal contract.
+/// ⚠️ **CONTRACT STUB** — This function is a placeholder that defines the
+/// behaviour contract. It always returns a default `TransportState`.
+/// **Do NOT call this directly.** Implement your own adapter instead.
 ///
 /// Actor-based adapters (recommended) should use `start()` or `start_link()`
 /// instead, returning `Result(Subject(Command), actor.StartError)`.
@@ -336,8 +332,10 @@ pub fn init() -> TransportState {
 
 /// Send a binary payload to a specific node.
 ///
-/// This is a **pure function signature** following the `crypto/provider` pattern.
-/// Actual implementations will vary:
+/// ⚠️ **CONTRACT STUB** — This function always returns
+/// `Error(AdapterFailure("not implemented"))`. It exists only to define
+/// the behaviour contract. Use a concrete adapter (e.g., `transport/beam_adapter`)
+/// for actual message sending.
 ///
 /// - **Actor-based** (recommended): Send command to transport actor via Subject
 /// - **Synchronous**: Call Erlang/NIF function directly
@@ -388,11 +386,9 @@ pub fn send(node: NodeId, payload: BitArray) -> Result(Nil, TransportError) {
 
 /// Broadcast a binary payload to multiple nodes.
 ///
-/// Returns a `BroadcastResult` containing per-node delivery outcomes.
-/// This allows the caller to detect and handle partial failures gracefully.
-///
-/// This is a **pure function signature**. Implementations will vary based on
-/// the transport adapter architecture (actor-based, synchronous, async).
+/// ⚠️ **CONTRACT STUB** — This function always returns
+/// `Error(AdapterFailure("not implemented"))`. It exists only to define
+/// the behaviour contract. Use a concrete adapter for actual broadcasting.
 ///
 /// The adapter may optimize this (e.g., multicast) but should ensure best-effort
 /// delivery to all reachable nodes.
@@ -448,8 +444,8 @@ pub fn broadcast(
 
 /// Check the health status of the transport adapter.
 ///
-/// This is a **pure function signature** for health checks.
-/// Should be lightweight and suitable for frequent polling by monitoring systems.
+/// ⚠️ **CONTRACT STUB** — This function always returns `Down("not implemented")`.
+/// It exists only to define the behaviour contract.
 ///
 /// ## Returns
 ///
@@ -460,7 +456,8 @@ pub fn health() -> HealthStatus {
 
 /// Retrieve adapter-specific operational metrics.
 ///
-/// This is a **pure function signature** for metrics retrieval.
+/// ⚠️ **CONTRACT STUB** — This function always returns an empty dict.
+/// It exists only to define the behaviour contract.
 ///
 /// ## Returns
 ///
