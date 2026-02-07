@@ -3,20 +3,22 @@
 /// These settings control global behavior of the library, particularly
 /// around security-sensitive operations like atom creation and message
 /// size limits.
+import gleam/dynamic.{type Dynamic}
+
 @external(erlang, "settings_ffi", "set_allow_atom_creation")
-fn set_allow_atom_creation_ffi(b: Bool) -> a
+fn set_allow_atom_creation_ffi(b: Bool) -> Dynamic
 
 @external(erlang, "settings_ffi", "get_allow_atom_creation")
 fn get_allow_atom_creation_ffi() -> Bool
 
 @external(erlang, "settings_ffi", "set_use_crypto_ids")
-fn set_use_crypto_ids_ffi(b: Bool) -> a
+fn set_use_crypto_ids_ffi(b: Bool) -> Dynamic
 
 @external(erlang, "settings_ffi", "get_use_crypto_ids")
 fn get_use_crypto_ids_ffi() -> Bool
 
 @external(erlang, "settings_ffi", "set_max_message_size")
-fn set_max_message_size_ffi(size: Int) -> a
+fn set_max_message_size_ffi(size: Int) -> Dynamic
 
 @external(erlang, "settings_ffi", "get_max_message_size")
 fn get_max_message_size_ffi() -> Int
