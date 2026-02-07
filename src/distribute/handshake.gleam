@@ -1,20 +1,12 @@
+import distribute/capability.{type Capability, Capability}
 import distribute/codec
 import distribute/crypto/provider as crypto_provider
 import gleam/bit_array
 import gleam/option.{type Option}
 import gleam/result
 
-/// Represents a capability advertised during handshake negotiation.
-///
-/// Contains protocol name, supported version range (min/max), and optional metadata.
-pub type Capability {
-  Capability(
-    protocol: String,
-    min: Int,
-    max: Int,
-    meta: List(#(String, String)),
-  )
-}
+// Re-export Capability from distribute/capability for backward compatibility.
+// The canonical type is defined in distribute/capability.gleam.
 
 /// Represents the initial Hello message sent when establishing a connection.
 ///
