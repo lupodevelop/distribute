@@ -4,6 +4,9 @@
          get_erlang_nodes/0, get_self_subject/0, spawn_event_handler/2,
          spawn_hook_handler/3]).
 
+%% Import shared utility for safe atom conversion
+-import(distribute_ffi_utils, [to_atom_safe/1]).
+
 %% Wrap a Subject into a dynamic value (no-op in Erlang)
 wrap_subject(Subject) -> Subject.
 
@@ -40,50 +43,6 @@ get_erlang_nodes() ->
 get_self_subject() ->
     {error, nil}.
 
-%% Safe atom conversion with allowed list
-to_atom_safe(Binary) when is_binary(Binary) ->
-    case binary:match(Binary, [<<"\0">>, <<" ">>, <<"@">>]) of
-        nomatch ->
-            %% Check if it's already an existing atom
-            try binary_to_existing_atom(Binary, utf8) of
-                Atom -> {ok, Atom}
-            catch
-                error:badarg ->
-                    %% For discovery names, we allow creation of new atoms
-                    %% but only for valid identifiers
-                    case is_valid_identifier(Binary) of
-                        true ->
-                            NewAtom = binary_to_atom(Binary, utf8),
-                            {ok, NewAtom};
-                        false ->
-                            {error, <<"invalid_name_format">>}
-                    end
-            end;
-        _ ->
-            {error, <<"invalid_characters_in_name">>}
-    end.
-
-%% Check if a binary is a valid identifier
-is_valid_identifier(<<>>) -> false;
-is_valid_identifier(Binary) ->
-    case Binary of
-        <<First, Rest/binary>> when First >= $a, First =< $z ->
-            is_valid_rest(Rest);
-        <<First, Rest/binary>> when First >= $A, First =< $Z ->
-            is_valid_rest(Rest);
-        <<"_", Rest/binary>> ->
-            is_valid_rest(Rest);
-        _ ->
-            false
-    end.
-
-is_valid_rest(<<>>) -> true;
-is_valid_rest(<<C, Rest/binary>>) when C >= $a, C =< $z -> is_valid_rest(Rest);
-is_valid_rest(<<C, Rest/binary>>) when C >= $A, C =< $Z -> is_valid_rest(Rest);
-is_valid_rest(<<C, Rest/binary>>) when C >= $0, C =< $9 -> is_valid_rest(Rest);
-is_valid_rest(<<"_", Rest/binary>>) -> is_valid_rest(Rest);
-is_valid_rest(_) -> false.
-
 %% Spawn a process to handle an event callback asynchronously
 %% This protects the main actor from slow or blocking callbacks
 spawn_event_handler(Callback, Event) ->
@@ -91,7 +50,10 @@ spawn_event_handler(Callback, Event) ->
         try
             Callback(Event)
         catch
-            _:_ -> ok  %% Silently ignore callback errors
+            Class:Reason ->
+                error_logger:warning_msg(
+                    "distribute discovery: event callback failed ~p:~p~n",
+                    [Class, Reason])
         end
     end).
 
@@ -101,6 +63,9 @@ spawn_hook_handler(Hook, Peer, Metadata) ->
         try
             Hook(Peer, Metadata)
         catch
-            _:_ -> ok  %% Silently ignore hook errors
+            Class:Reason ->
+                error_logger:warning_msg(
+                    "distribute discovery: hook callback failed ~p:~p~n",
+                    [Class, Reason])
         end
     end).
