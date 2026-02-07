@@ -80,20 +80,25 @@ fn do_receive_with_retry(
 }
 
 /// Create a request-response pattern: send and wait for reply.
+///
+/// ## Parameters
+///
+/// - `target`: Global name of the service to send the request to
+/// - `request`: The request message to send
+/// - `request_encoder`: Encoder for the request type
+/// - `response_decoder`: Decoder for the response type
+/// - `response_encoder`: Encoder for the response type (used for the reply subject)
+/// - `timeout_ms`: Maximum time to wait for a response
 pub fn request(
   target: String,
   request: req,
   request_encoder: Encoder(req),
   response_decoder: Decoder(resp),
+  response_encoder: Encoder(resp),
   timeout_ms: Int,
 ) -> Result(resp, RequestError) {
-  // Create temporary subject for response
-  let reply_subject =
-    global.new(
-      fn(_) { Ok(<<>>) },
-      // Dummy encoder, won't be used
-      response_decoder,
-    )
+  // Create temporary subject for response with proper encoder
+  let reply_subject = global.new(response_encoder, response_decoder)
 
   // Register temporarily
   let temp_name = "request_" <> string.inspect(process.self())
