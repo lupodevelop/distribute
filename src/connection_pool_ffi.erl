@@ -9,7 +9,8 @@
 %% Returns {ok, PoolId} or {error, Reason}
 new_pool(TargetNode, MaxConnections) when is_binary(TargetNode), is_integer(MaxConnections) ->
     PoolId = erlang:unique_integer([positive]),
-    TableName = list_to_atom("pool_" ++ integer_to_list(PoolId)),
+    %% Use a bounded pool name to prevent atom table exhaustion
+    TableName = binary_to_atom(<<"distribute_pool_", (integer_to_binary(PoolId))/binary>>, utf8),
     try
         ets:new(TableName, [named_table, public, set]),
         ets:insert(TableName, {target_node, TargetNode}),
