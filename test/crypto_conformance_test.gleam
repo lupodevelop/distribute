@@ -155,8 +155,7 @@ fn tamper_ciphertext(ciphertext: BitArray) -> BitArray {
             Ok(<<byte>>) -> {
               let flipped = int.bitwise_exclusive_or(byte, 0xFF)
               case bit_array.slice(ciphertext, mid + 1, size - mid - 1) {
-                Ok(suffix) ->
-                  bit_array.concat([prefix, <<flipped>>, suffix])
+                Ok(suffix) -> bit_array.concat([prefix, <<flipped>>, suffix])
                 _ -> ciphertext
               }
             }
@@ -255,9 +254,7 @@ pub fn health_returns_valid_status_test(adapter: CryptoAdapter) -> Nil {
     // After fresh init, we expect Up or Degraded (not Down)
     case health {
       types.Down(reason) ->
-        panic as {
-          "Fresh provider should not be Down: " <> reason
-        }
+        panic as { "Fresh provider should not be Down: " <> reason }
       types.Up -> Nil
       types.Degraded(_reason) -> Nil
     }
@@ -704,7 +701,6 @@ pub fn metrics_increment_on_operations_test(adapter: CryptoAdapter) -> Nil {
 
 /// Individual test exports for running via gleeunit.
 /// These use the OTP crypto adapter as a reference implementation.
-
 import distribute/crypto/otp_crypto_adapter
 
 pub fn otp_adapter_lifecycle_conformance_test() {

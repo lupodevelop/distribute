@@ -1,4 +1,5 @@
-import distribute/handshake.{Capability, Hello}
+import distribute/capability.{Capability}
+import distribute/handshake.{Hello}
 import distribute/handshake/actor as hs_actor
 import distribute/registry/actor as registry_actor
 import distribute/registry/behaviour as registry_behaviour

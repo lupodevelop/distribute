@@ -1,4 +1,5 @@
-import distribute/handshake.{Capability, Hello}
+import distribute/capability.{Capability}
+import distribute/handshake.{Hello}
 import distribute/handshake/actor.{start_initiator_handshake}
 import gleam/erlang/process
 import gleam/option.{None}

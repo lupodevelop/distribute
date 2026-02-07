@@ -108,7 +108,7 @@ pub fn encode_decode_for_node_test() {
   let metadata =
     behaviour.Metadata(
       node_id: node_id,
-      capabilities: [Capability("test_protocol", 1, 2)],
+      capabilities: [Capability("test_protocol", 1, 2, meta: [])],
       extra: "test_protocol:1",
     )
 
@@ -167,7 +167,7 @@ pub fn encode_for_node_version_2_test() {
   let metadata =
     behaviour.Metadata(
       node_id: node_id,
-      capabilities: [Capability("test_protocol", 2, 2)],
+      capabilities: [Capability("test_protocol", 2, 2, meta: [])],
       extra: "test_protocol:2",
     )
 
@@ -247,7 +247,7 @@ pub fn encode_for_node_no_negotiated_version_test() {
   let metadata =
     behaviour.Metadata(
       node_id: node_id,
-      capabilities: [Capability("other_protocol", 1, 1)],
+      capabilities: [Capability("other_protocol", 1, 1, meta: [])],
       extra: "other_protocol:1",
     )
 
@@ -294,8 +294,8 @@ pub fn encode_for_node_multiple_protocols_test() {
     behaviour.Metadata(
       node_id: node_id,
       capabilities: [
-        Capability("proto_a", 1, 2),
-        Capability("proto_b", 3, 5),
+        Capability("proto_a", 1, 2, meta: []),
+        Capability("proto_b", 3, 5, meta: []),
       ],
       extra: "proto_a:1,proto_b:2",
     )

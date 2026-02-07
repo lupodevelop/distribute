@@ -13,8 +13,8 @@ pub fn main() {
 // ============================================================================
 
 pub fn negotiate_compatible_ranges_test() {
-  let local = [Capability("proto_a", 1, 3)]
-  let remote = [Capability("proto_a", 2, 5)]
+  let local = [Capability("proto_a", 1, 3, meta: [])]
+  let remote = [Capability("proto_a", 2, 5, meta: [])]
 
   negotiation.protocol_negotiate(local, remote, "proto_a")
   |> should.equal(Some(3))
@@ -22,16 +22,16 @@ pub fn negotiate_compatible_ranges_test() {
 }
 
 pub fn negotiate_exact_match_test() {
-  let local = [Capability("proto_a", 2, 2)]
-  let remote = [Capability("proto_a", 2, 2)]
+  let local = [Capability("proto_a", 2, 2, meta: [])]
+  let remote = [Capability("proto_a", 2, 2, meta: [])]
 
   negotiation.protocol_negotiate(local, remote, "proto_a")
   |> should.equal(Some(2))
 }
 
 pub fn negotiate_no_overlap_test() {
-  let local = [Capability("proto_a", 1, 2)]
-  let remote = [Capability("proto_a", 3, 5)]
+  let local = [Capability("proto_a", 1, 2, meta: [])]
+  let remote = [Capability("proto_a", 3, 5, meta: [])]
 
   negotiation.protocol_negotiate(local, remote, "proto_a")
   |> should.equal(None)
@@ -39,8 +39,8 @@ pub fn negotiate_no_overlap_test() {
 }
 
 pub fn negotiate_missing_protocol_local_test() {
-  let local = [Capability("proto_a", 1, 3)]
-  let remote = [Capability("proto_b", 1, 5)]
+  let local = [Capability("proto_a", 1, 3, meta: [])]
+  let remote = [Capability("proto_b", 1, 5, meta: [])]
 
   negotiation.protocol_negotiate(local, remote, "proto_b")
   |> should.equal(None)
@@ -48,8 +48,8 @@ pub fn negotiate_missing_protocol_local_test() {
 }
 
 pub fn negotiate_missing_protocol_remote_test() {
-  let local = [Capability("proto_a", 1, 3)]
-  let remote = [Capability("proto_b", 1, 5)]
+  let local = [Capability("proto_a", 1, 3, meta: [])]
+  let remote = [Capability("proto_b", 1, 5, meta: [])]
 
   negotiation.protocol_negotiate(local, remote, "proto_a")
   |> should.equal(None)
@@ -57,8 +57,8 @@ pub fn negotiate_missing_protocol_remote_test() {
 }
 
 pub fn negotiate_missing_protocol_both_test() {
-  let local = [Capability("proto_a", 1, 3)]
-  let remote = [Capability("proto_b", 1, 5)]
+  let local = [Capability("proto_a", 1, 3, meta: [])]
+  let remote = [Capability("proto_b", 1, 5, meta: [])]
 
   negotiation.protocol_negotiate(local, remote, "proto_c")
   |> should.equal(None)
@@ -66,8 +66,8 @@ pub fn negotiate_missing_protocol_both_test() {
 }
 
 pub fn negotiate_subset_range_test() {
-  let local = [Capability("proto_a", 1, 10)]
-  let remote = [Capability("proto_a", 3, 7)]
+  let local = [Capability("proto_a", 1, 10, meta: [])]
+  let remote = [Capability("proto_a", 3, 7, meta: [])]
 
   negotiation.protocol_negotiate(local, remote, "proto_a")
   |> should.equal(Some(7))
@@ -75,8 +75,8 @@ pub fn negotiate_subset_range_test() {
 }
 
 pub fn negotiate_remote_subset_test() {
-  let local = [Capability("proto_a", 5, 8)]
-  let remote = [Capability("proto_a", 1, 20)]
+  let local = [Capability("proto_a", 5, 8, meta: [])]
+  let remote = [Capability("proto_a", 1, 20, meta: [])]
 
   negotiation.protocol_negotiate(local, remote, "proto_a")
   |> should.equal(Some(8))
@@ -84,8 +84,8 @@ pub fn negotiate_remote_subset_test() {
 }
 
 pub fn negotiate_adjacent_ranges_no_overlap_test() {
-  let local = [Capability("proto_a", 1, 3)]
-  let remote = [Capability("proto_a", 4, 6)]
+  let local = [Capability("proto_a", 1, 3, meta: [])]
+  let remote = [Capability("proto_a", 4, 6, meta: [])]
 
   negotiation.protocol_negotiate(local, remote, "proto_a")
   |> should.equal(None)
@@ -93,8 +93,8 @@ pub fn negotiate_adjacent_ranges_no_overlap_test() {
 }
 
 pub fn negotiate_single_version_overlap_test() {
-  let local = [Capability("proto_a", 1, 3)]
-  let remote = [Capability("proto_a", 3, 5)]
+  let local = [Capability("proto_a", 1, 3, meta: [])]
+  let remote = [Capability("proto_a", 3, 5, meta: [])]
 
   negotiation.protocol_negotiate(local, remote, "proto_a")
   |> should.equal(Some(3))
@@ -102,8 +102,14 @@ pub fn negotiate_single_version_overlap_test() {
 }
 
 pub fn negotiate_multiple_protocols_independent_test() {
-  let local = [Capability("proto_a", 1, 3), Capability("proto_b", 5, 10)]
-  let remote = [Capability("proto_a", 2, 4), Capability("proto_b", 7, 12)]
+  let local = [
+    Capability("proto_a", 1, 3, meta: []),
+    Capability("proto_b", 5, 10, meta: []),
+  ]
+  let remote = [
+    Capability("proto_a", 2, 4, meta: []),
+    Capability("proto_b", 7, 12, meta: []),
+  ]
 
   // Negotiate proto_a
   negotiation.protocol_negotiate(local, remote, "proto_a")
@@ -116,7 +122,7 @@ pub fn negotiate_multiple_protocols_independent_test() {
 
 pub fn negotiate_empty_capabilities_test() {
   let local = []
-  let remote = [Capability("proto_a", 1, 3)]
+  let remote = [Capability("proto_a", 1, 3, meta: [])]
 
   negotiation.protocol_negotiate(local, remote, "proto_a")
   |> should.equal(None)
@@ -127,28 +133,31 @@ pub fn negotiate_empty_capabilities_test() {
 // ============================================================================
 
 pub fn validate_capabilities_valid_test() {
-  let caps = [Capability("proto_a", 1, 3), Capability("proto_b", 5, 10)]
+  let caps = [
+    Capability("proto_a", 1, 3, meta: []),
+    Capability("proto_b", 5, 10, meta: []),
+  ]
 
   negotiation.validate_capabilities(caps)
   |> should.equal(Ok(Nil))
 }
 
 pub fn validate_capabilities_min_equals_max_test() {
-  let caps = [Capability("proto_a", 2, 2)]
+  let caps = [Capability("proto_a", 2, 2, meta: [])]
 
   negotiation.validate_capabilities(caps)
   |> should.equal(Ok(Nil))
 }
 
 pub fn validate_capabilities_invalid_range_test() {
-  let caps = [Capability("proto_a", 5, 2)]
+  let caps = [Capability("proto_a", 5, 2, meta: [])]
 
   negotiation.validate_capabilities(caps)
   |> should.be_error()
 }
 
 pub fn validate_capabilities_empty_protocol_test() {
-  let caps = [Capability("", 1, 3)]
+  let caps = [Capability("", 1, 3, meta: [])]
 
   negotiation.validate_capabilities(caps)
   |> should.be_error()
@@ -156,9 +165,9 @@ pub fn validate_capabilities_empty_protocol_test() {
 
 pub fn validate_capabilities_multiple_invalid_test() {
   let caps = [
-    Capability("proto_a", 1, 3),
-    Capability("proto_b", 10, 5),
-    Capability("", 1, 2),
+    Capability("proto_a", 1, 3, meta: []),
+    Capability("proto_b", 10, 5, meta: []),
+    Capability("", 1, 2, meta: []),
   ]
 
   negotiation.validate_capabilities(caps)

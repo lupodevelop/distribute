@@ -1,4 +1,5 @@
-import distribute/handshake.{Capability, Hello}
+import distribute/capability.{Capability}
+import distribute/handshake.{Hello}
 import distribute/handshake/state.{
   Established, Received, Sent, initiator_handle_message, initiator_start,
   responder_handle_message, responder_init, stub_crypto_provider,
