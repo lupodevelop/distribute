@@ -14,6 +14,10 @@
 /// - Metrics for observability (ping success/fail counts)
 import gleam/list
 
+/// Health status of a cluster member.
+///
+/// Used by the failure detector / gossip protocol to track
+/// whether a node is reachable, suspected of failure, or confirmed dead.
 pub type Status {
   Alive
   Suspect
@@ -83,6 +87,10 @@ pub fn suspect() -> List(String) {
   suspect_ffi()
 }
 
+/// Get the current leader node according to the membership service.
+///
+/// Returns `Ok(node_name)` if a leader is known, `Error(Nil)` if
+/// no leader has been elected or the cluster is empty.
 pub fn current_leader() -> Result(String, Nil) {
   let s = current_leader_ffi()
   case s {
@@ -96,11 +104,18 @@ pub fn metrics() -> List(#(String, Int)) {
   metrics_ffi()
 }
 
-/// Increment a named metric (useful in tests).
+/// Increment a named metric.
+///
+/// ⚠️ **TEST HELPER** — This function is intended for testing only.
+@deprecated("Test helper only; do not use in production")
 pub fn metrics_inc(name: String) -> Nil {
   metrics_increment_ffi(name)
 }
 
+/// Get a named metric value.
+///
+/// ⚠️ **TEST HELPER** — This function is intended for testing only.
+@deprecated("Test helper only; do not use in production")
 pub fn metrics_get(name: String) -> Int {
   metrics_get_ffi(name)
 }
