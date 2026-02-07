@@ -95,7 +95,8 @@ is_ok_tuple({ok, _}) -> true;
 is_ok_tuple(_) -> false.
 
 %% Extract Subject from {ok, Subject}
-extract_subject({ok, Subject}) -> Subject.
+extract_subject({ok, Subject}) -> Subject;
+extract_subject(_) -> error(badarg).
 
 %% Return the 'millisecond' atom for erlang:system_time/1
 millisecond_atom() -> millisecond.
