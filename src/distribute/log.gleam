@@ -370,6 +370,10 @@ fn set_persistent_term_str(key: String, value: String) -> Nil
 fn get_persistent_term_str(key: String, default: String) -> String
 
 /// Retrieve the last formatted log entry (test helper)
+///
+/// ⚠️ **TEST HELPER** — This function is intended for testing only.
+/// Do not rely on it in production code.
+@deprecated("Test helper only; do not use in production")
 pub fn last_log_entry_for_test() -> option.Option(String) {
   let v = get_persistent_term_str("distribute_last_log", "")
   case v {
@@ -379,6 +383,10 @@ pub fn last_log_entry_for_test() -> option.Option(String) {
 }
 
 /// Clear the last formatted log entry (test helper)
+///
+/// ⚠️ **TEST HELPER** — This function is intended for testing only.
+/// Do not rely on it in production code.
+@deprecated("Test helper only; do not use in production")
 pub fn clear_last_log_entry_for_test() -> Nil {
   set_persistent_term_str("distribute_last_log", "")
 }
