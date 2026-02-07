@@ -1,3 +1,4 @@
+import distribute/capability.{type Capability, Capability}
 import distribute/crypto/provider
 import distribute/crypto/provider_stub
 import distribute/handshake
@@ -586,24 +587,24 @@ pub fn handshake_on_timeout(state: HandshakeState) -> Result(Outcome, String) {
 }
 
 fn find_mutual(
-  local_caps: List(handshake.Capability),
-  remote_caps: List(handshake.Capability),
+  local_caps: List(Capability),
+  remote_caps: List(Capability),
 ) -> Option(#(String, Int)) {
   // Find first matching protocol and overlapping version
   case local_caps {
     [] -> None
-    [handshake.Capability(protocol: lp, min: lmin, max: lmax, meta: _), ..rest] ->
+    [Capability(protocol: lp, min: lmin, max: lmax, meta: _), ..rest] ->
       case
         list.find(remote_caps, fn(rc) {
           case rc {
-            handshake.Capability(protocol: rp, min: rmin, max: rmax, meta: _) ->
+            Capability(protocol: rp, min: rmin, max: rmax, meta: _) ->
               rp == lp && rmin <= lmax && rmax >= lmin
           }
         })
       {
         Ok(cap_found) -> {
           case cap_found {
-            handshake.Capability(protocol: _rp, min: rmin, max: _rmax, meta: _) -> {
+            Capability(protocol: _rp, min: rmin, max: _rmax, meta: _) -> {
               // Choose min overlap
               case rmin > lmin {
                 True -> Some(#(lp, rmin))
