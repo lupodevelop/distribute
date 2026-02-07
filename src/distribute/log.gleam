@@ -127,7 +127,11 @@ pub fn log(
 // Correlation ID management
 // ============================================================================
 
-/// Execute a function with a specific correlation ID
+/// Execute a function with a specific correlation ID.
+///
+/// ⚠️ **Planned for v2.2.0** — Currently a no-op that simply calls `f()`.
+/// Will use process dictionary or OTP metadata to propagate the
+/// correlation ID through the call stack.
 pub fn with_correlation_id(_id: String, f: fn() -> a) -> a {
   // For now, we just execute the function
   // In a more advanced implementation, we could use process dictionary
@@ -154,7 +158,7 @@ pub fn generate_correlation_id() -> String {
 fn fallback_correlation_id() -> String {
   // Use timestamp plus monotonic time for uniqueness
   let ts = get_timestamp()
-  let monotonic = erlang_monotonic_time(1_000_000)
+  let monotonic = erlang_monotonic_time(microsecond_atom())
   let seed = monotonic % 100_000
   "corr-" <> int_to_string(ts) <> "-" <> int_to_string(seed)
 }
@@ -338,7 +342,7 @@ fn level_to_int(level: Level) -> Int {
 
 /// Get current timestamp (milliseconds since epoch)
 fn get_timestamp() -> Int {
-  erlang_system_time(1000)
+  erlang_system_time(millisecond_atom())
 }
 
 // ============================================================================
@@ -348,10 +352,16 @@ fn get_timestamp() -> Int {
 // io_put_chars is now called via logger_ffi in Erlang; remove direct external
 
 @external(erlang, "erlang", "system_time")
-fn erlang_system_time(unit: Int) -> Int
+fn erlang_system_time(unit: Dynamic) -> Int
+
+@external(erlang, "registry_ffi", "millisecond_atom")
+fn millisecond_atom() -> Dynamic
+
+@external(erlang, "registry_ffi", "microsecond_atom")
+fn microsecond_atom() -> Dynamic
 
 @external(erlang, "erlang", "monotonic_time")
-fn erlang_monotonic_time(unit: Int) -> Int
+fn erlang_monotonic_time(unit: Dynamic) -> Int
 
 @external(erlang, "erlang", "integer_to_binary")
 fn int_to_string(int: Int) -> String
@@ -410,6 +420,6 @@ fn crypto_rand_base64_safe_ffi(n: Int) -> Dynamic
 fn crypto_is_ok_ffi(v: Dynamic) -> Bool
 
 @external(erlang, "erlang", "element")
-fn element(index: Int, tuple: Dynamic) -> a
+fn element(index: Int, tuple: Dynamic) -> String
 // Use rand_base64_safe_ffi instead in calls to handle errors gracefully
 // remove the dynamic crypto ffi declarations as they're no longer used
