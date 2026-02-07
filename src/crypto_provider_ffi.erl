@@ -9,7 +9,8 @@
     system_time_ms/0,
     generate_key_id/0,
     put_persistent_term/2,
-    get_persistent_term/1
+    get_persistent_term/1,
+    delete_persistent_term/1
 ]).
 
 %% Import shared utility for safe atom conversion
@@ -86,4 +87,15 @@ get_persistent_term(Key) when is_binary(Key) ->
     catch
         error:badarg ->
             {error, nil}
+    end.
+
+%% @doc Delete a persistent_term key (for test cleanup).
+-spec delete_persistent_term(binary()) -> nil.
+delete_persistent_term(Name) when is_binary(Name) ->
+    Key = <<"crypto_handle_", Name/binary>>,
+    try
+        persistent_term:erase({crypto_handle, Key}),
+        nil
+    catch
+        _:_ -> nil
     end.
