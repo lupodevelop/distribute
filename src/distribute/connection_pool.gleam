@@ -195,8 +195,11 @@ pub fn send_batch_parallel(
   }
 }
 
-/// Run a concurrency stress-test against a pool. This spawns multiple worker processes
-/// each performing `ops` get/release cycles using the pool; returns final pool stats.
+/// Run a concurrency stress-test against a pool.
+///
+/// ⚠️ **TEST HELPER** — This function is intended for testing and benchmarking
+/// only. Do not use in production code.
+@deprecated("This is a test helper; use it only in test modules")
 pub fn stress_test(
   pool: Pool,
   ops_per_worker: Int,
