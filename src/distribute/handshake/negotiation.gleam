@@ -1,5 +1,6 @@
 import distribute/capability.{type NodeCapabilities}
 import distribute/codec
+import distribute/codec/schema as codec_schema
 import distribute/registry/actor as registry
 import distribute/registry/behaviour
 import gleam/erlang/process
@@ -101,7 +102,7 @@ pub fn schema_encode_for_node(
   timeout_ms: Int,
   node_id: String,
   protocol: String,
-  schemas: List(codec.Schema(a)),
+  schemas: List(codec_schema.Schema(a)),
   value: a,
 ) -> Result(BitArray, String) {
   // Lookup node metadata from registry
@@ -116,7 +117,7 @@ pub fn schema_encode_for_node(
           // Find schema with matching version
           case find_schema_by_version(schemas, version) {
             Some(schema) -> {
-              case codec.schema_encode(schema, value) {
+              case codec_schema.schema_encode(schema, value) {
                 Ok(binary) -> Ok(binary)
                 Error(e) -> Error(codec.encode_error_to_string(e))
               }
@@ -152,7 +153,7 @@ pub fn schema_decode_from_node(
   timeout_ms: Int,
   node_id: String,
   protocol: String,
-  schemas: List(codec.Schema(a)),
+  schemas: List(codec_schema.Schema(a)),
   binary: BitArray,
 ) -> Result(a, String) {
   case registry.lookup_sync(registry, timeout_ms, node_id) {
@@ -163,7 +164,7 @@ pub fn schema_decode_from_node(
         Ok(version) -> {
           case find_schema_by_version(schemas, version) {
             Some(schema) -> {
-              case codec.schema_decode(schema, binary) {
+              case codec_schema.schema_decode(schema, binary) {
                 Ok(value) -> Ok(value)
                 Error(e) -> Error(codec.decode_error_to_string(e))
               }
@@ -218,9 +219,9 @@ fn extract_negotiated_versions(extra: String) -> List(#(String, Int)) {
 
 /// Find a schema with matching version.
 fn find_schema_by_version(
-  schemas: List(codec.Schema(a)),
+  schemas: List(codec_schema.Schema(a)),
   version: Int,
-) -> Option(codec.Schema(a)) {
+) -> Option(codec_schema.Schema(a)) {
   list.find(schemas, fn(schema) { schema.version == version })
   |> option.from_result()
 }
