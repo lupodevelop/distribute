@@ -1,5 +1,6 @@
 import distribute/capability.{type Capability, Capability}
 import distribute/codec
+import distribute/codec/schema as codec_schema
 import distribute/crypto/provider as crypto_provider
 import gleam/bit_array
 import gleam/option.{type Option}
@@ -68,7 +69,7 @@ pub type HandshakeError {
 pub fn peek_envelope_tag(
   data: BitArray,
 ) -> Result(#(String, Int), HandshakeError) {
-  case codec.peek_envelope(data) {
+  case codec_schema.peek_envelope(data) {
     Ok(t) -> Ok(t)
     Error(_) -> Error(InvalidEnvelope("invalid envelope"))
   }
@@ -237,8 +238,8 @@ pub fn keyexchange_sized_decoder() -> codec.SizedDecoder(KeyExchangeMsg) {
 }
 
 /// Returns the codec schema for Hello messages with envelope support.
-pub fn hello_schema() -> codec.Schema(Hello) {
-  codec.new_schema(
+pub fn hello_schema() -> codec_schema.Schema(Hello) {
+  codec_schema.new_schema(
     tag: "distribute:hello",
     version: 1,
     encoder: hello_encoder(),
@@ -247,8 +248,8 @@ pub fn hello_schema() -> codec.Schema(Hello) {
 }
 
 /// Returns the codec schema for CapabilitiesMsg with envelope support.
-pub fn capabilities_schema() -> codec.Schema(CapabilitiesMsg) {
-  codec.new_schema(
+pub fn capabilities_schema() -> codec_schema.Schema(CapabilitiesMsg) {
+  codec_schema.new_schema(
     tag: "distribute:capabilities",
     version: 1,
     encoder: capabilities_encoder(),
@@ -257,8 +258,8 @@ pub fn capabilities_schema() -> codec.Schema(CapabilitiesMsg) {
 }
 
 /// Returns the codec schema for Accept messages with envelope support.
-pub fn accept_schema() -> codec.Schema(Accept) {
-  codec.new_schema(
+pub fn accept_schema() -> codec_schema.Schema(Accept) {
+  codec_schema.new_schema(
     tag: "distribute:accept",
     version: 1,
     encoder: accept_encoder(),
@@ -267,8 +268,8 @@ pub fn accept_schema() -> codec.Schema(Accept) {
 }
 
 /// Returns the codec schema for Reject messages with envelope support.
-pub fn reject_schema() -> codec.Schema(Reject) {
-  codec.new_schema(
+pub fn reject_schema() -> codec_schema.Schema(Reject) {
+  codec_schema.new_schema(
     tag: "distribute:reject",
     version: 1,
     encoder: reject_encoder(),
@@ -277,8 +278,8 @@ pub fn reject_schema() -> codec.Schema(Reject) {
 }
 
 /// Returns the codec schema for KeyExchangeMsg with envelope support.
-pub fn keyexchange_schema() -> codec.Schema(KeyExchangeMsg) {
-  codec.new_schema(
+pub fn keyexchange_schema() -> codec_schema.Schema(KeyExchangeMsg) {
+  codec_schema.new_schema(
     tag: "distribute:keyexchange",
     version: 1,
     encoder: keyexchange_encoder(),
@@ -288,58 +289,58 @@ pub fn keyexchange_schema() -> codec.Schema(KeyExchangeMsg) {
 
 /// Encodes a Hello message to binary format with envelope wrapper.
 pub fn encode_hello(h: Hello) -> Result(BitArray, codec.EncodeError) {
-  codec.schema_encode(hello_schema(), h)
+  codec_schema.schema_encode(hello_schema(), h)
 }
 
 /// Decodes a Hello message from binary format, unwrapping the envelope.
 pub fn decode_hello(data: BitArray) -> Result(Hello, codec.DecodeError) {
-  codec.schema_decode(hello_schema(), data)
+  codec_schema.schema_decode(hello_schema(), data)
 }
 
 /// Encodes a CapabilitiesMsg to binary format with envelope wrapper.
 pub fn encode_capabilities(
   m: CapabilitiesMsg,
 ) -> Result(BitArray, codec.EncodeError) {
-  codec.schema_encode(capabilities_schema(), m)
+  codec_schema.schema_encode(capabilities_schema(), m)
 }
 
 /// Decodes a CapabilitiesMsg from binary format, unwrapping the envelope.
 pub fn decode_capabilities(
   data: BitArray,
 ) -> Result(CapabilitiesMsg, codec.DecodeError) {
-  codec.schema_decode(capabilities_schema(), data)
+  codec_schema.schema_decode(capabilities_schema(), data)
 }
 
 /// Encodes an Accept message to binary format with envelope wrapper.
 pub fn encode_accept(a: Accept) -> Result(BitArray, codec.EncodeError) {
-  codec.schema_encode(accept_schema(), a)
+  codec_schema.schema_encode(accept_schema(), a)
 }
 
 /// Decodes an Accept message from binary format, unwrapping the envelope.
 pub fn decode_accept(data: BitArray) -> Result(Accept, codec.DecodeError) {
-  codec.schema_decode(accept_schema(), data)
+  codec_schema.schema_decode(accept_schema(), data)
 }
 
 /// Encodes a Reject message to binary format with envelope wrapper.
 pub fn encode_reject(r: Reject) -> Result(BitArray, codec.EncodeError) {
-  codec.schema_encode(reject_schema(), r)
+  codec_schema.schema_encode(reject_schema(), r)
 }
 
 /// Decodes a Reject message from binary format, unwrapping the envelope.
 pub fn decode_reject(data: BitArray) -> Result(Reject, codec.DecodeError) {
-  codec.schema_decode(reject_schema(), data)
+  codec_schema.schema_decode(reject_schema(), data)
 }
 
 /// Encodes a KeyExchangeMsg to binary format with envelope wrapper.
 pub fn encode_keyexchange(
   k: KeyExchangeMsg,
 ) -> Result(BitArray, codec.EncodeError) {
-  codec.schema_encode(keyexchange_schema(), k)
+  codec_schema.schema_encode(keyexchange_schema(), k)
 }
 
 /// Decodes a KeyExchangeMsg from binary format, unwrapping the envelope.
 pub fn decode_keyexchange(
   data: BitArray,
 ) -> Result(KeyExchangeMsg, codec.DecodeError) {
-  codec.schema_decode(keyexchange_schema(), data)
+  codec_schema.schema_decode(keyexchange_schema(), data)
 }
