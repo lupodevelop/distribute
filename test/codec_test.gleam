@@ -1,4 +1,5 @@
 import distribute/codec
+import distribute/codec/advanced
 import gleeunit/should
 
 pub fn string_codec_roundtrip_test() {
@@ -57,11 +58,11 @@ import gleam/erlang/process
 pub fn pid_codec_test() {
   let pid = process.self()
 
-  let encoded = codec.pid_encoder()(pid)
+  let encoded = advanced.pid_encoder()(pid)
   encoded |> should.be_ok
 
   let assert Ok(data) = encoded
-  let decoded = codec.pid_decoder()(data)
+  let decoded = advanced.pid_decoder()(data)
   decoded |> should.be_ok
 
   let assert Ok(decoded_pid) = decoded
@@ -71,11 +72,11 @@ pub fn pid_codec_test() {
 pub fn subject_codec_test() {
   let subject = process.new_subject()
 
-  let encoded = codec.subject_encoder()(subject)
+  let encoded = advanced.subject_encoder()(subject)
   encoded |> should.be_ok
 
   let assert Ok(data) = encoded
-  let decoded = codec.subject_decoder()(data)
+  let decoded = advanced.subject_decoder()(data)
   decoded |> should.be_ok
 
   let assert Ok(decoded_subject) = decoded

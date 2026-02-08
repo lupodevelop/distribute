@@ -1,5 +1,7 @@
 /// Tests for type-safe messaging with envelope and codec validation.
 import distribute/codec
+import distribute/codec/composite
+import distribute/codec/schema as codec_schema
 import distribute/messaging
 import gleam/bit_array
 import gleam/list
@@ -283,7 +285,7 @@ pub fn encode_error_to_send_error_test() {
 
 pub fn schema_encode_decode_test() {
   let schema =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "greeting",
       version: 1,
       encoder: codec.string_encoder(),
@@ -291,15 +293,15 @@ pub fn schema_encode_decode_test() {
     )
 
   let original = "Hello, Schema!"
-  let assert Ok(encoded) = codec.schema_encode(schema, original)
-  let assert Ok(decoded) = codec.schema_decode(schema, encoded)
+  let assert Ok(encoded) = codec_schema.schema_encode(schema, original)
+  let assert Ok(decoded) = codec_schema.schema_decode(schema, encoded)
 
   decoded |> should.equal(original)
 }
 
 pub fn schema_tag_mismatch_returns_error_test() {
   let schema1 =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "type_a",
       version: 1,
       encoder: codec.int_encoder(),
@@ -307,16 +309,16 @@ pub fn schema_tag_mismatch_returns_error_test() {
     )
 
   let schema2 =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "type_b",
       version: 1,
       encoder: codec.int_encoder(),
       decoder: codec.int_decoder(),
     )
 
-  let assert Ok(encoded) = codec.schema_encode(schema1, 42)
+  let assert Ok(encoded) = codec_schema.schema_encode(schema1, 42)
 
-  case codec.schema_decode(schema2, encoded) {
+  case codec_schema.schema_decode(schema2, encoded) {
     Error(codec.TagMismatch(expected, got)) -> {
       expected |> should.equal("type_b")
       got |> should.equal("type_a")
@@ -327,7 +329,7 @@ pub fn schema_tag_mismatch_returns_error_test() {
 
 pub fn schema_version_mismatch_returns_error_test() {
   let schema_v1 =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "msg",
       version: 1,
       encoder: codec.int_encoder(),
@@ -335,16 +337,16 @@ pub fn schema_version_mismatch_returns_error_test() {
     )
 
   let schema_v2 =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "msg",
       version: 2,
       encoder: codec.int_encoder(),
       decoder: codec.int_decoder(),
     )
 
-  let assert Ok(encoded) = codec.schema_encode(schema_v1, 100)
+  let assert Ok(encoded) = codec_schema.schema_encode(schema_v1, 100)
 
-  case codec.schema_decode(schema_v2, encoded) {
+  case codec_schema.schema_decode(schema_v2, encoded) {
     Error(codec.VersionMismatch(expected, got)) -> {
       expected |> should.equal(2)
       got |> should.equal(1)
@@ -355,13 +357,13 @@ pub fn schema_version_mismatch_returns_error_test() {
 
 pub fn peek_tag_test() {
   let data = codec.wrap_envelope("my_tag", 5, <<"payload">>)
-  let assert Ok(tag) = codec.peek_tag(data)
+  let assert Ok(tag) = codec_schema.peek_tag(data)
   tag |> should.equal("my_tag")
 }
 
 pub fn peek_envelope_test() {
   let data = codec.wrap_envelope("event", 3, <<"data">>)
-  let assert Ok(#(tag, version)) = codec.peek_envelope(data)
+  let assert Ok(#(tag, version)) = codec_schema.peek_envelope(data)
   tag |> should.equal("event")
   version |> should.equal(3)
 }
@@ -406,9 +408,9 @@ pub fn list_of_strings_properly_decodes_test() {
 pub fn tuple2_encode_decode_test() {
   let original = #("hello", 42)
   let encoder =
-    codec.tuple2_encoder(codec.string_encoder(), codec.int_encoder())
+    composite.tuple2_encoder(codec.string_encoder(), codec.int_encoder())
   let decoder =
-    codec.tuple2_decoder(
+    composite.tuple2_decoder(
       codec.string_sized_decoder(),
       codec.int_sized_decoder(),
     )
@@ -422,13 +424,13 @@ pub fn tuple2_encode_decode_test() {
 pub fn tuple3_encode_decode_test() {
   let original = #("test", 123, 3.14)
   let encoder =
-    codec.tuple3_encoder(
+    composite.tuple3_encoder(
       codec.string_encoder(),
       codec.int_encoder(),
       codec.float_encoder(),
     )
   let decoder =
-    codec.tuple3_decoder(
+    composite.tuple3_decoder(
       codec.string_sized_decoder(),
       codec.int_sized_decoder(),
       codec.float_sized_decoder(),
@@ -455,7 +457,7 @@ pub fn versioned_decoder_handles_multiple_versions_test() {
   let data_v2 = codec.wrap_envelope("num", 2, v2_payload)
 
   let decoder =
-    codec.versioned_decoder("num", [
+    codec_schema.versioned_decoder("num", [
       #(1, codec.int_decoder()),
       #(2, codec.int_decoder()),
     ])
@@ -470,7 +472,7 @@ pub fn versioned_decoder_handles_multiple_versions_test() {
 pub fn versioned_decoder_rejects_unknown_version_test() {
   let data = codec.wrap_envelope("num", 99, <<0, 0, 0, 0, 0, 0, 0, 1>>)
 
-  let decoder = codec.versioned_decoder("num", [#(1, codec.int_decoder())])
+  let decoder = codec_schema.versioned_decoder("num", [#(1, codec.int_decoder())])
 
   case decoder(data) {
     Error(codec.VersionMismatch(_, got)) -> got |> should.equal(99)
@@ -480,7 +482,7 @@ pub fn versioned_decoder_rejects_unknown_version_test() {
 
 pub fn versioned_decoder_from_schemas_test() {
   let v1_schema =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "num",
       version: 1,
       encoder: codec.int_encoder(),
@@ -488,7 +490,7 @@ pub fn versioned_decoder_from_schemas_test() {
     )
 
   let v2_schema =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "num",
       version: 2,
       encoder: codec.int_encoder(),
@@ -498,7 +500,7 @@ pub fn versioned_decoder_from_schemas_test() {
   let data_v1 = codec.wrap_envelope("num", 1, <<0, 0, 0, 0, 0, 0, 0, 10>>)
   let data_v2 = codec.wrap_envelope("num", 2, <<0, 0, 0, 0, 0, 0, 0, 20>>)
 
-  let decoder = codec.versioned_decoder_from_schemas([v1_schema, v2_schema])
+  let decoder = codec_schema.versioned_decoder_from_schemas([v1_schema, v2_schema])
 
   let assert Ok(result1) = decoder(data_v1)
   let assert Ok(result2) = decoder(data_v2)
@@ -510,7 +512,7 @@ pub fn versioned_decoder_from_schemas_test() {
 pub fn schema_decode_with_migrations_test() {
   // target schema is version 2
   let target =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "num",
       version: 2,
       encoder: codec.int_encoder(),
@@ -523,7 +525,7 @@ pub fn schema_decode_with_migrations_test() {
   let migration = fn(payload: BitArray) { Ok(payload) }
 
   let data_v1 = codec.wrap_envelope("num", 1, <<0, 0, 0, 0, 0, 0, 0, 10>>)
-  let decoder = codec.schema_decode_with_migrations(target, [#(1, migration)])
+  let decoder = codec_schema.schema_decode_with_migrations(target, [#(1, migration)])
 
   let assert Ok(result) = decoder(data_v1)
   result |> should.equal(10)
@@ -531,7 +533,7 @@ pub fn schema_decode_with_migrations_test() {
 
 pub fn schema_decode_with_migrations_missing_migration_test() {
   let target =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "num",
       version: 2,
       encoder: codec.int_encoder(),
@@ -539,7 +541,7 @@ pub fn schema_decode_with_migrations_missing_migration_test() {
     )
 
   let data_v1 = codec.wrap_envelope("num", 1, <<0, 0, 0, 0, 0, 0, 0, 10>>)
-  let decoder = codec.schema_decode_with_migrations(target, [])
+  let decoder = codec_schema.schema_decode_with_migrations(target, [])
 
   case decoder(data_v1) {
     Error(codec.MigrationMissing(step)) -> step |> should.equal(1)
@@ -574,7 +576,7 @@ pub fn migration_chain_applies_steps_test() {
   }
 
   // Use graph-based builder with explicit edges (1->2, 2->3)
-  let chain = codec.build_migration_graph([#(1, 2, migr1), #(2, 3, migr2)])
+  let chain = codec_schema.build_migration_graph([#(1, 2, migr1), #(2, 3, migr2)])
 
   let data_v1 = codec.wrap_envelope("num", 1, <<0, 0, 0, 0, 0, 0, 0, 10>>)
   // Apply chain from 1 -> 3
@@ -606,7 +608,7 @@ pub fn migration_chain_missing_step_test() {
   }
 
   // chain builder accepts both single-step and multi-step edges; test missing step
-  let chain = codec.build_migration_graph([#(1, 2, migr1)])
+  let chain = codec_schema.build_migration_graph([#(1, 2, migr1)])
   let data_v1 = codec.wrap_envelope("num", 1, <<0, 0, 0, 0, 0, 0, 0, 10>>)
 
   case codec.unwrap_envelope(data_v1) {

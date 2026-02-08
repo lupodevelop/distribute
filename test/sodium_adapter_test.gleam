@@ -47,47 +47,39 @@ pub fn init_returns_provider_failure_test() {
 pub fn shutdown_returns_ok_test() {
   let adp = sodium_adapter.new()
   // We need a dummy handle — use new_handle with a fake state
-  let handle =
-    types.new_handle("dummy", gleam_dynamic_nil())
+  let handle = types.new_handle("dummy", gleam_dynamic_nil())
   let result = adp.shutdown(handle)
   should.be_ok(result)
 }
 
 pub fn handshake_start_returns_error_test() {
   let adp = sodium_adapter.new()
-  let handle =
-    types.new_handle("dummy", gleam_dynamic_nil())
+  let handle = types.new_handle("dummy", gleam_dynamic_nil())
   let result = adp.handshake_start(handle, "local", "remote", None)
   should.be_error(result)
 }
 
 pub fn handshake_continue_returns_error_test() {
   let adp = sodium_adapter.new()
-  let handle =
-    types.new_handle("dummy", gleam_dynamic_nil())
-  let state = types.new_handshake_state("a", "b", types.Plain, gleam_dynamic_nil())
+  let handle = types.new_handle("dummy", gleam_dynamic_nil())
+  let state =
+    types.new_handshake_state("a", "b", types.Plain, gleam_dynamic_nil())
   let msg =
-    types.HandshakeMessage(
-      message_type: "test",
-      payload: <<>>,
-      metadata: None,
-    )
+    types.HandshakeMessage(message_type: "test", payload: <<>>, metadata: None)
   let result = adp.handshake_continue(handle, state, msg)
   should.be_error(result)
 }
 
 pub fn secure_context_returns_none_test() {
   let adp = sodium_adapter.new()
-  let handle =
-    types.new_handle("dummy", gleam_dynamic_nil())
+  let handle = types.new_handle("dummy", gleam_dynamic_nil())
   let result = adp.secure_context(handle, "any_node")
   should.equal(result, None)
 }
 
 pub fn encrypt_returns_error_test() {
   let adp = sodium_adapter.new()
-  let handle =
-    types.new_handle("dummy", gleam_dynamic_nil())
+  let handle = types.new_handle("dummy", gleam_dynamic_nil())
   let ctx =
     types.new_secure_context(
       "node",
@@ -102,8 +94,7 @@ pub fn encrypt_returns_error_test() {
 
 pub fn decrypt_returns_error_test() {
   let adp = sodium_adapter.new()
-  let handle =
-    types.new_handle("dummy", gleam_dynamic_nil())
+  let handle = types.new_handle("dummy", gleam_dynamic_nil())
   let ctx =
     types.new_secure_context(
       "node",
@@ -118,28 +109,24 @@ pub fn decrypt_returns_error_test() {
 
 pub fn rekey_returns_error_test() {
   let adp = sodium_adapter.new()
-  let handle =
-    types.new_handle("dummy", gleam_dynamic_nil())
+  let handle = types.new_handle("dummy", gleam_dynamic_nil())
   let result = adp.rekey(handle, "any_node")
   should.be_error(result)
 }
 
 pub fn health_returns_down_test() {
   let adp = sodium_adapter.new()
-  let handle =
-    types.new_handle("dummy", gleam_dynamic_nil())
+  let handle = types.new_handle("dummy", gleam_dynamic_nil())
   let result = adp.health(handle)
   case result {
-    types.Down(reason) ->
-      should.equal(reason, "sodium adapter not implemented")
+    types.Down(reason) -> should.equal(reason, "sodium adapter not implemented")
     _ -> should.fail()
   }
 }
 
 pub fn metrics_returns_empty_test() {
   let adp = sodium_adapter.new()
-  let handle =
-    types.new_handle("dummy", gleam_dynamic_nil())
+  let handle = types.new_handle("dummy", gleam_dynamic_nil())
   let m = adp.metrics(handle)
   should.equal(m.handshakes_initiated, 0)
   should.equal(m.handshakes_completed, 0)

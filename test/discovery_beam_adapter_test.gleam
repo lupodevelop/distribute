@@ -1,5 +1,5 @@
-import distribute/discovery/beam_adapter
 import distribute/discovery/adapter
+import distribute/discovery/beam_adapter
 import gleeunit
 import gleeunit/should
 

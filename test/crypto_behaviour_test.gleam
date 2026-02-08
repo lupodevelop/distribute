@@ -20,7 +20,12 @@ pub fn main() {
 
 pub fn new_secure_context_node_id_test() {
   let ctx =
-    behaviour.new_secure_context("node@host", SecureEstablished, 1_000_000, "k1")
+    behaviour.new_secure_context(
+      "node@host",
+      SecureEstablished,
+      1_000_000,
+      "k1",
+    )
   behaviour.context_node_id(ctx)
   |> should.equal("node@host")
 }
@@ -74,15 +79,13 @@ pub fn new_handshake_state_remote_node_test() {
 }
 
 pub fn handshake_state_established_test() {
-  let state =
-    behaviour.new_handshake_state("a", "b", SecureEstablished)
+  let state = behaviour.new_handshake_state("a", "b", SecureEstablished)
   behaviour.handshake_stage(state)
   |> should.equal(SecureEstablished)
 }
 
 pub fn handshake_state_failed_test() {
-  let state =
-    behaviour.new_handshake_state("a", "b", Failed("bad key"))
+  let state = behaviour.new_handshake_state("a", "b", Failed("bad key"))
   behaviour.handshake_stage(state)
   |> should.equal(Failed("bad key"))
 }
@@ -275,10 +278,18 @@ pub fn encryption_failed_is_not_permanent_test() {
 
 pub fn transient_and_permanent_mutually_exclusive_test() {
   let errors: List(CryptoError) = [
-    InitFailed(""), ShutdownFailed(""), TransientNetwork(""),
-    InvalidSignature, KeyMismatch, DecryptionFailed(""),
-    EncryptionFailed(""), NoSecureContext(""), HandshakeFailed(""),
-    RekeyFailed(""), ProviderFailure(""), Timeout(0),
+    InitFailed(""),
+    ShutdownFailed(""),
+    TransientNetwork(""),
+    InvalidSignature,
+    KeyMismatch,
+    DecryptionFailed(""),
+    EncryptionFailed(""),
+    NoSecureContext(""),
+    HandshakeFailed(""),
+    RekeyFailed(""),
+    ProviderFailure(""),
+    Timeout(0),
   ]
   list_check_exclusive(errors)
 }

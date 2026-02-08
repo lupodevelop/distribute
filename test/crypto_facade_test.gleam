@@ -119,7 +119,7 @@ pub fn handshake_start_after_init_test() {
 pub fn encrypt_decrypt_roundtrip_test() {
   let opts = crypto.default_options("distribute_crypto")
   let assert Ok(_) = crypto.start_link(opts)
-  
+
   // noop adapter: secure_context returns a context
   let ctx_opt = crypto.secure_context("any_node")
   case ctx_opt {

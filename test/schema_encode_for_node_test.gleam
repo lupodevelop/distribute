@@ -1,5 +1,7 @@
 import distribute/capability.{Capability}
 import distribute/codec
+import distribute/codec/composite
+import distribute/codec/schema as codec_schema
 import distribute/handshake/negotiation
 import distribute/registry/actor as registry
 import distribute/registry/behaviour
@@ -26,7 +28,7 @@ fn test_encoder_v1() -> codec.Encoder(TestMessage) {
       TestMessage(content, counter) -> {
         // Encode as tuple of (String, Int)
         let tuple_encoder =
-          codec.tuple2_encoder(codec.string_encoder(), codec.int_encoder())
+          composite.tuple2_encoder(codec.string_encoder(), codec.int_encoder())
         codec.encode(tuple_encoder, #(content, counter))
       }
     }
@@ -36,7 +38,7 @@ fn test_encoder_v1() -> codec.Encoder(TestMessage) {
 fn test_decoder_v1() -> codec.Decoder(TestMessage) {
   fn(data) {
     let tuple_decoder =
-      codec.tuple2_decoder(
+      composite.tuple2_decoder(
         codec.string_sized_decoder(),
         codec.int_sized_decoder(),
       )
@@ -54,7 +56,7 @@ fn test_encoder_v2() -> codec.Encoder(TestMessage) {
       TestMessage(content, counter) -> {
         let prefixed = "v2:" <> content
         let tuple_encoder =
-          codec.tuple2_encoder(codec.string_encoder(), codec.int_encoder())
+          composite.tuple2_encoder(codec.string_encoder(), codec.int_encoder())
         codec.encode(tuple_encoder, #(prefixed, counter))
       }
     }
@@ -64,7 +66,7 @@ fn test_encoder_v2() -> codec.Encoder(TestMessage) {
 fn test_decoder_v2() -> codec.Decoder(TestMessage) {
   fn(data) {
     let tuple_decoder =
-      codec.tuple2_decoder(
+      composite.tuple2_decoder(
         codec.string_sized_decoder(),
         codec.int_sized_decoder(),
       )
@@ -88,14 +90,14 @@ pub fn encode_decode_for_node_test() {
 
   // Create schemas for different versions
   let schema_v1 =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "test_msg",
       version: 1,
       encoder: test_encoder_v1(),
       decoder: test_decoder_v1(),
     )
   let schema_v2 =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "test_msg",
       version: 2,
       encoder: test_encoder_v2(),
@@ -147,14 +149,14 @@ pub fn encode_for_node_version_2_test() {
   let assert Ok(reg) = registry.start()
 
   let schema_v1 =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "test_msg",
       version: 1,
       encoder: test_encoder_v1(),
       decoder: test_decoder_v1(),
     )
   let schema_v2 =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "test_msg",
       version: 2,
       encoder: test_encoder_v2(),
@@ -206,7 +208,7 @@ pub fn encode_for_node_not_found_test() {
   let assert Ok(reg) = registry.start()
 
   let schema_v1 =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "test_msg",
       version: 1,
       encoder: test_encoder_v1(),
@@ -234,7 +236,7 @@ pub fn encode_for_node_no_negotiated_version_test() {
   let assert Ok(reg) = registry.start()
 
   let schema_v1 =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "test_msg",
       version: 1,
       encoder: test_encoder_v1(),
@@ -273,14 +275,14 @@ pub fn encode_for_node_multiple_protocols_test() {
   let assert Ok(reg) = registry.start()
 
   let schema_v1 =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "test_msg",
       version: 1,
       encoder: test_encoder_v1(),
       decoder: test_decoder_v1(),
     )
   let schema_v2 =
-    codec.new_schema(
+    codec_schema.new_schema(
       tag: "test_msg",
       version: 2,
       encoder: test_encoder_v2(),

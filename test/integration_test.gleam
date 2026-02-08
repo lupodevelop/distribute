@@ -1,5 +1,6 @@
 /// Comprehensive integration tests for type-safe distributed messaging.
 import distribute/codec
+import distribute/codec/composite
 import distribute/global
 import distribute/receiver
 import distribute/registry
@@ -91,8 +92,8 @@ fn test_roundtrip(encoder, decoder, value) {
 
 /// Test Option codec with None and Some cases.
 pub fn option_codec_comprehensive_test() {
-  let encoder = codec.option_encoder(codec.string_encoder())
-  let decoder = codec.option_decoder(codec.string_decoder())
+  let encoder = composite.option_encoder(codec.string_encoder())
+  let decoder = composite.option_decoder(codec.string_decoder())
 
   // None case
   test_roundtrip(encoder, decoder, option.None)
@@ -104,9 +105,9 @@ pub fn option_codec_comprehensive_test() {
 /// Test Result codec with Ok and Error cases.
 pub fn result_codec_comprehensive_test() {
   let encoder =
-    codec.result_encoder(codec.int_encoder(), codec.string_encoder())
+    composite.result_encoder(codec.int_encoder(), codec.string_encoder())
   let decoder =
-    codec.result_decoder(codec.int_decoder(), codec.string_decoder())
+    composite.result_decoder(codec.int_decoder(), codec.string_decoder())
 
   // Ok case
   test_roundtrip(encoder, decoder, Ok(100))

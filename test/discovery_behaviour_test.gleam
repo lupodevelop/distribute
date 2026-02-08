@@ -106,8 +106,13 @@ pub fn subscription_failed_is_not_permanent_test() {
 
 pub fn transient_permanent_mutually_exclusive_test() {
   let errors: List(DiscoveryError) = [
-    StartFailed(""), StopFailed(""), ShutdownTimeout(0), SyncFailed(""),
-    PeerNotFound(""), InvalidConfiguration(""), Timeout(0),
+    StartFailed(""),
+    StopFailed(""),
+    ShutdownTimeout(0),
+    SyncFailed(""),
+    PeerNotFound(""),
+    InvalidConfiguration(""),
+    Timeout(0),
     SubscriptionFailed(""),
   ]
   check_exclusive(errors)
