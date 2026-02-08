@@ -120,10 +120,11 @@ pub fn pick_random_peers(nodes: List(String), count: Int) -> List(String) {
   |> list.sort(fn(a, b) {
     case a.0 < b.0 {
       True -> order.Lt
-      False -> case a.0 == b.0 {
-        True -> order.Eq
-        False -> order.Gt
-      }
+      False ->
+        case a.0 == b.0 {
+          True -> order.Eq
+          False -> order.Gt
+        }
     }
   })
   |> list.map(fn(pair) { pair.1 })
