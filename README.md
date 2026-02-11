@@ -110,8 +110,8 @@ let user_id_codec = codec.map(codec.int(), UserId, fn(uid) {
 ```
 
 Gleam has no derive macros or reflection, so codecs for complex types
-are manual. The combinators handle the serialization — you just wire
-the fields together.
+are manual. The combinators handle the serialization so you just wire
+the fields together!
 
 ## Modules
 
