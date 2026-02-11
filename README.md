@@ -17,7 +17,7 @@ puts binary codecs in front of `:global` and `Subject` so the compiler can
 catch mismatches before messages leave the process.
 
 "Typed" here means checked at encode/decode boundaries. There is no shared
-type system across nodes — the BEAM doesn't work that way.
+type system across nodes. The BEAM doesn't work that way.
 
 ## Install
 
@@ -117,7 +117,7 @@ the fields together.
 
 | Module | Does |
 |--------|------|
-| `distribute` | Facade — start node, connect, send, lookup |
+| `distribute` | Facade: start node, connect, send, lookup |
 | `distribute/actor` | Named actors, supervision, pools |
 | `distribute/cluster` | `net_kernel` start/connect/ping |
 | `distribute/codec` | Binary codecs for primitives + `subject()` |
