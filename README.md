@@ -12,7 +12,7 @@ Typed distributed messaging for Gleam on the BEAM.
 ## What this is
 
 Erlang already gives you distribution, but from Gleam you lose type info at
-the node boundary — everything crosses the wire as raw terms. `distribute`
+the node boundary, everything crosses the wire as raw terms. `distribute`
 puts binary codecs in front of `:global` and `Subject` so the compiler can
 catch mismatches before messages leave the process.
 
