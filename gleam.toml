@@ -1,5 +1,5 @@
 name = "distribute"
-version = "3.0.0"
+version = "3.1.0"
 description = "Typed distributed messaging for Gleam on the BEAM."
 licences = ["MIT"]
 repository = { type = "github", user = "lupodevelop", repo = "distribute" }

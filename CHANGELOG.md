@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.1.0 — 2026-03-04
+
+### Added
+
+- **Cluster Monitoring** (`distribute/cluster/monitor`) — Typed event-driven
+  notifications for `NodeUp` and `NodeDown`.
+- `distribute.subscribe(subject)` — Start a monitored subscription.
+- `distribute.unsubscribe(monitor_subject)` — Stop a subscription.
+
 ## v3.0.0 — 2026-02-11
 
 Ground-up rewrite. Smaller API, proper OTP actors, compile-time type safety

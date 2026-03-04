@@ -124,8 +124,31 @@ the fields together!
 | `distribute/codec/composite` | Option, Result, Tuple codecs |
 | `distribute/codec/tagged` | Tagged messages with version field |
 | `distribute/global` | `GlobalSubject(msg)`, `call`, `reply` |
+| `distribute/cluster/monitor` | `NodeUp`, `NodeDown` typed events |
 | `distribute/registry` | `TypedName(msg)`, `:global` registration |
 | `distribute/receiver` | Typed receive, OTP actor wrappers |
+
+### Cluster Monitoring
+
+Subscribe to cluster events (`NodeUp`, `NodeDown`) to react to node topology changes.
+
+```gleam
+import distribute
+import distribute/cluster/monitor
+
+let subj = process.new_subject()
+let assert Ok(m) = distribute.subscribe(subj)
+
+// In your actor/process
+case process.receive(subj, 5000) {
+  Ok(monitor.NodeUp(node)) -> io.println("Node joined: " <> node)
+  Ok(monitor.NodeDown(node)) -> io.println("Node left: " <> node)
+  _ -> Nil
+}
+
+// Later
+distribute.unsubscribe(m)
+```
 
 ## Caveats
 

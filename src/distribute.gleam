@@ -3,14 +3,16 @@
 
 import distribute/actor as dist_actor
 import distribute/cluster
+import distribute/cluster/monitor
 import distribute/codec
 import distribute/global
 import distribute/receiver
 import distribute/registry
+import gleam/erlang/process
 import gleam/otp/actor
 
 pub fn version() -> String {
-  "3.0.0"
+  "3.1.0"
 }
 
 // -- Cluster -----------------------------------------------------------------
@@ -83,4 +85,16 @@ pub fn lookup(
 
 pub fn unregister(name: String) -> Result(Nil, registry.RegisterError) {
   registry.unregister(name)
+}
+
+// -- Cluster Monitoring ------------------------------------------------------
+
+pub fn subscribe(
+  user_subject: process.Subject(monitor.ClusterEvent),
+) -> Result(process.Subject(monitor.ControlMessage), actor.StartError) {
+  monitor.subscribe(user_subject)
+}
+
+pub fn unsubscribe(monitor_subject: process.Subject(monitor.ControlMessage)) -> Nil {
+  monitor.unsubscribe(monitor_subject)
 }
