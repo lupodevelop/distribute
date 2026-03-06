@@ -1,5 +1,19 @@
 # Changelog
 
+## v3.1.0 — 2026-03-04
+
+### Added
+
+- **Cluster Monitoring** (`distribute/cluster/monitor`) — Typed event-driven
+  notifications for `NodeUp` and `NodeDown`.
+- `distribute.subscribe(subject)` — Start a monitored subscription.
+- `distribute.unsubscribe(monitor_subject)` — Stop a subscription.
+- **ADT/Variant Codecs** (`distribute/codec/variant`) — A builder pattern to
+  easily create codecs for Custom Types (enums) with payload support.
+- `variant.new()`, `variant.add()`, `variant.unit()`, `variant.build()`
+- **Telemetry** (`distribute/internal/telemetry`) — Erlang `:telemetry` events
+  for send, receive, encode, decode, registry, and cluster operations.
+
 ## v3.0.0 — 2026-02-11
 
 Ground-up rewrite. Smaller API, proper OTP actors, compile-time type safety

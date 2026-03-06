@@ -1,6 +1,9 @@
 -module(cluster_ffi).
 -export([start_node/2, connect/1, nodes/0, self_node/0, ping/1,
-         is_ok_atom/1, get_error_reason/1, is_true/1, is_ignored/1]).
+         is_ok_atom/1, get_error_reason/1, is_true/1, is_ignored/1,
+         nodeup_atom/0, nodedown_atom/0, monitor_nodes/1,
+         atom_to_string/1, get_node_from_tuple/1,
+         simulate_node_event/3]).
 
 -import(distribute_ffi_utils, [to_atom_safe/1]).
 
@@ -80,3 +83,18 @@ to_atom_force(Atom) when is_atom(Atom) ->
 is_valid_node_input(Bin) when is_binary(Bin) ->
     byte_size(Bin) =< 512 andalso
     binary:match(Bin, <<"\0">>) =:= nomatch.
+
+nodeup_atom() -> nodeup.
+nodedown_atom() -> nodedown.
+
+monitor_nodes(Flag) ->
+    net_kernel:monitor_nodes(Flag).
+
+atom_to_string(Atom) when is_atom(Atom) ->
+    atom_to_binary(Atom, utf8).
+
+get_node_from_tuple({_, Node}) -> Node.
+
+simulate_node_event(Pid, Tag, NodeName) ->
+    NodeAtom = binary_to_atom(NodeName, utf8),
+    Pid ! {Tag, NodeAtom}.

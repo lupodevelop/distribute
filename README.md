@@ -110,8 +110,8 @@ let user_id_codec = codec.map(codec.int(), UserId, fn(uid) {
 ```
 
 Gleam has no derive macros or reflection, so codecs for complex types
-are manual. The combinators handle the serialization — you just wire
-the fields together.
+are manual. The combinators handle the serialization so you just wire
+the fields together!
 
 ## Modules
 
@@ -122,10 +122,56 @@ the fields together.
 | `distribute/cluster` | `net_kernel` start/connect/ping |
 | `distribute/codec` | Binary codecs for primitives + `subject()` |
 | `distribute/codec/composite` | Option, Result, Tuple codecs |
+| `distribute/codec/variant` | Build codecs for Custom Types (ADTs) |
 | `distribute/codec/tagged` | Tagged messages with version field |
 | `distribute/global` | `GlobalSubject(msg)`, `call`, `reply` |
+| `distribute/cluster/monitor` | `NodeUp`, `NodeDown` typed events |
 | `distribute/registry` | `TypedName(msg)`, `:global` registration |
 | `distribute/receiver` | Typed receive, OTP actor wrappers |
+
+### Custom Type Codecs
+
+Seamlessly encode and decode your Algebraic Data Types (enums) with a fluent builder.
+
+```gleam
+pub type MyMessage {
+  Text(String)
+  Ping
+}
+
+import distribute/codec
+import distribute/codec/variant
+
+let my_codec = 
+  variant.new()
+  |> variant.add(0, "Text", codec.string(), Text, fn(m) {
+    case m { Text(s) -> Ok(s); _ -> Error(Nil) }
+  })
+  |> variant.unit(1, "Ping", Ping, fn(m) { m == Ping })
+  |> variant.build()
+```
+
+### Cluster Monitoring
+
+Subscribe to cluster events (`NodeUp`, `NodeDown`) to react to node topology changes.
+
+```gleam
+import distribute
+import distribute/cluster/monitor
+
+let subj = process.new_subject()
+let assert Ok(m) = distribute.subscribe(subj)
+
+// In your actor/process
+case process.receive(subj, 5000) {
+  Ok(monitor.NodeUp(node)) -> io.println("Node joined: " <> node)
+  Ok(monitor.NodeDown(node)) -> io.println("Node left: " <> node)
+  _ -> Nil
+}
+
+// Later
+distribute.unsubscribe(m)
+```
 
 ## Caveats
 

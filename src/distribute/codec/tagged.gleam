@@ -1,5 +1,5 @@
-/// Tagged message codec: embeds a tag string and version number in the
-/// binary format. Decoders reject messages with mismatched tags or versions.
+/// Tagged message codec: embeds a tag string and version number
+/// in the binary. Decoders reject mismatched tags or versions.
 import distribute/codec
 import gleam/bit_array
 import gleam/result
@@ -34,8 +34,7 @@ pub fn version(msg: TaggedMessage(payload)) -> Int {
 }
 
 /// Encoder for tagged messages.
-///
-/// Format: `[tag_len:32][tag:utf8][version:32][payload]`
+/// Format: [tag_len:32][tag:utf8][version:32][payload]
 pub fn encoder(
   payload_encoder: codec.Encoder(payload),
 ) -> codec.Encoder(TaggedMessage(payload)) {
@@ -48,8 +47,6 @@ pub fn encoder(
 }
 
 /// Decoder for tagged messages with tag and version validation.
-///
-/// Returns `TagMismatch` or `VersionMismatch` errors for protocol mismatches.
 pub fn decoder(
   expected_tag: String,
   expected_version: Int,

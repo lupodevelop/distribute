@@ -1,8 +1,7 @@
-/// Typed wrapper around `Subject(BitArray)` for cross-node messaging.
-///
-/// Pairs a subject with an encoder and decoder. Constructors:
-/// `new`, `from_pid`, `from_name`, `from_subject`.
+/// Typed wrapper around Subject(BitArray) for cross-node messaging.
 import distribute/codec
+import distribute/internal/telemetry
+import gleam/bit_array
 import gleam/dynamic
 import gleam/erlang/process
 
@@ -10,8 +9,7 @@ import gleam/erlang/process
 // Subject construction (single point of coupling)
 // ---------------------------------------------------------------------------
 
-/// Build a Subject from a PID and a tag via our own FFI.
-/// Single point of coupling with gleam_erlang's Subject layout.
+/// Build a Subject from a PID and a tag via FFI.
 @external(erlang, "distribute_ffi_utils", "create_subject")
 fn create_subject(
   owner: process.Pid,
@@ -29,7 +27,7 @@ fn make_ref() -> dynamic.Dynamic
 // Type
 // ---------------------------------------------------------------------------
 
-/// A subject with a codec, usable across nodes.
+/// A subject bundled with its codec, usable across nodes.
 pub opaque type GlobalSubject(msg) {
   GlobalSubject(
     subject: process.Subject(BitArray),
@@ -51,8 +49,7 @@ pub fn new(
   GlobalSubject(subject:, encoder:, decoder:)
 }
 
-/// Subject from a remote PID. Nil tag, send-only — you can't
-/// receive on it from the calling process.
+/// Send-only subject from a remote PID. Uses a nil tag.
 pub fn from_pid(
   pid: process.Pid,
   encoder: codec.Encoder(msg),
@@ -71,8 +68,8 @@ pub fn from_subject(
   GlobalSubject(subject:, encoder:, decoder:)
 }
 
-/// Subject from a name and PID. The name is the tag, so any node
-/// that knows the name can reconstruct the same Subject.
+/// Subject from a name and PID. The name becomes the tag,
+/// allowing any node with the same name to reconstruct it.
 pub fn from_name(
   name: String,
   pid: process.Pid,
@@ -112,12 +109,27 @@ pub fn send(
   global: GlobalSubject(msg),
   message: msg,
 ) -> Result(Nil, codec.EncodeError) {
+  let start = telemetry.system_time()
   case codec.encode(global.encoder, message) {
     Ok(binary) -> {
+      let duration = telemetry.system_time() - start
+      let size = bit_array.byte_size(binary)
+      telemetry.emit_codec_encode_stop(duration, size, True)
+
+      let start_send = telemetry.system_time()
       process.send(global.subject, binary)
+      let duration_send = telemetry.system_time() - start_send
+
+      // We don't always have a name for the subject (could be Pid-based)
+      // But we can try to find the target info if possible.
+      telemetry.emit_message_send_stop(duration_send, size, "unknown", True)
       Ok(Nil)
     }
-    Error(err) -> Error(err)
+    Error(err) -> {
+      let duration = telemetry.system_time() - start
+      telemetry.emit_codec_encode_stop(duration, 0, False)
+      Error(err)
+    }
   }
 }
 
@@ -127,7 +139,16 @@ pub fn receive(
   timeout_ms: Int,
 ) -> Result(msg, codec.DecodeError) {
   case process.receive(global.subject, timeout_ms) {
-    Ok(binary) -> codec.decode(global.decoder, binary)
+    Ok(binary) -> {
+      let start_decode = telemetry.system_time()
+      let res = codec.decode(global.decoder, binary)
+      let duration_decode = telemetry.system_time() - start_decode
+      telemetry.emit_codec_decode_stop(duration_decode, case res {
+        Ok(_) -> True
+        _ -> False
+      })
+      res
+    }
     Error(Nil) -> Error(codec.DecodeTimeout)
   }
 }
@@ -142,9 +163,8 @@ pub type CallError {
   CallDecodeFailed(codec.DecodeError)
 }
 
-/// Synchronous request/response. Creates a temporary subject, sends
-/// the request (built by `make_request`), waits for the reply.
-/// The handler must call `reply` with the same subject.
+/// Synchronous request/response. Creates a temporary subject,
+/// sends the request, waits for the reply.
 pub fn call(
   target: GlobalSubject(req),
   make_request: fn(process.Subject(BitArray)) -> req,
@@ -169,8 +189,7 @@ pub fn call(
   }
 }
 
-/// Send a response through a reply subject. Used by the handler
-/// to answer a `call`.
+/// Send a response through a reply subject.
 pub fn reply(
   reply_to: process.Subject(BitArray),
   response: resp,

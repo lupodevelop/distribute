@@ -119,7 +119,7 @@ pub fn start_supervised(
   }
 }
 
-/// Start N supervised actors, registered as `name_1` .. `name_N`.
+/// Start N supervised actors, registered as name_1 .. name_N.
 pub fn pool(
   typed_name: registry.TypedName(msg),
   size: Int,

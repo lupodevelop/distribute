@@ -1,18 +1,9 @@
-/// Global name registration via Erlang's `:global` module.
-///
-/// The key idea is `TypedName(msg)`: a name string bundled with its
-/// encoder/decoder. Define it once, pass it to both registration and
-/// lookup, and the compiler makes sure the message type matches.
-///
-/// ```gleam
-/// let counter = registry.typed_name("counter", int_encoder(), int_decoder())
-///
-/// let assert Ok(gs) = actor.start(counter, 0, handler)
-/// let assert Ok(Nil) = registry.register_global(counter, gs)
-/// let assert Ok(found) = registry.lookup(counter)
-/// ```
+/// Global name registration via Erlang's :global module.
+/// TypedName(msg) binds a name to an encoder/decoder pair.
+/// Define it once, use it for both registration and lookup.
 import distribute/codec
 import distribute/global
+import distribute/internal/telemetry
 import gleam/dynamic
 import gleam/erlang/process
 import gleam/int
@@ -23,9 +14,7 @@ import gleam/string
 // ---------------------------------------------------------------------------
 
 /// A name bound to an encoder/decoder pair.
-///
-/// The `msg` type links registration and lookup: register with
-/// `TypedName(Int)`, look up a `GlobalSubject(Int)`.
+/// The msg type links registration and lookup at compile time.
 pub opaque type TypedName(msg) {
   TypedName(
     name: String,
@@ -34,10 +23,7 @@ pub opaque type TypedName(msg) {
   )
 }
 
-/// Create a typed name.
-///
-/// Share this value between registration and lookup so the compiler
-/// can check that both sides use the same message type.
+/// Create a typed name from separate encoder and decoder.
 pub fn typed_name(
   name: String,
   encoder: codec.Encoder(msg),
@@ -46,11 +32,7 @@ pub fn typed_name(
   TypedName(name:, encoder:, decoder:)
 }
 
-/// Same as `typed_name` but takes a bundled `Codec`.
-///
-/// ```gleam
-/// let counter = registry.named("counter", codec.int())
-/// ```
+/// Create a typed name from a bundled Codec.
 pub fn named(name: String, c: codec.Codec(msg)) -> TypedName(msg) {
   TypedName(name:, encoder: c.encoder, decoder: c.decoder)
 }
@@ -70,10 +52,7 @@ pub fn typed_name_decoder(tn: TypedName(msg)) -> codec.Decoder(msg) {
   tn.decoder
 }
 
-/// Create a `TypedName` for a pool member.
-///
-/// Given a base `TypedName` with name `"worker"` and index `2`,
-/// returns a `TypedName` with name `"worker_2"` and the same codecs.
+/// Derive a pool member name by appending the index.
 pub fn pool_member(base: TypedName(msg), index: Int) -> TypedName(msg) {
   TypedName(..base, name: base.name <> "_" <> int.to_string(index))
 }
@@ -136,13 +115,24 @@ pub fn register(name: String, pid: process.Pid) -> Result(Nil, RegisterError) {
   case validate_name(name) {
     Error(e) -> Error(e)
     Ok(_) -> {
+      let start = telemetry.system_time()
       let res = register_ffi(name, pid)
+      let duration = telemetry.system_time() - start
       case is_ok_atom(res) {
-        True -> Ok(Nil)
+        True -> {
+          telemetry.emit_registry_register_stop(name, True, duration)
+          Ok(Nil)
+        }
         False ->
           case is_already_registered(res) {
-            True -> Error(AlreadyExists)
-            False -> Error(classify_error(get_error_reason(res)))
+            True -> {
+              telemetry.emit_registry_register_stop(name, False, duration)
+              Error(AlreadyExists)
+            }
+            False -> {
+              telemetry.emit_registry_register_stop(name, False, duration)
+              Error(classify_error(get_error_reason(res)))
+            }
           }
       }
     }
@@ -160,10 +150,8 @@ pub fn register_typed(
   }
 }
 
-/// Register a `GlobalSubject` under a typed name.
-///
-/// The `msg` type parameter on `TypedName(msg)` and `GlobalSubject(msg)`
-/// must match — the compiler enforces this.
+/// Register a GlobalSubject under a typed name.
+/// The compiler enforces that both sides share the same msg type.
 pub fn register_global(
   tn: TypedName(msg),
   global_subject: global.GlobalSubject(msg),
@@ -188,14 +176,27 @@ pub fn whereis(name: String) -> Result(process.Pid, Nil) {
   }
 }
 
-/// Look up a globally registered `GlobalSubject` by `TypedName`.
-///
-/// Reconstructs the Subject with a deterministic tag derived from
-/// the name.
+/// Look up a globally registered GlobalSubject by TypedName.
+/// Reconstructs the Subject with a deterministic tag from the name.
 pub fn lookup(tn: TypedName(msg)) -> Result(global.GlobalSubject(msg), Nil) {
+  let start = telemetry.system_time()
   case whereis(tn.name) {
-    Ok(pid) -> Ok(global.from_name(tn.name, pid, tn.encoder, tn.decoder))
-    Error(Nil) -> Error(Nil)
+    Ok(pid) -> {
+      telemetry.emit_registry_lookup_stop(
+        tn.name,
+        True,
+        telemetry.system_time() - start,
+      )
+      Ok(global.from_name(tn.name, pid, tn.encoder, tn.decoder))
+    }
+    Error(Nil) -> {
+      telemetry.emit_registry_lookup_stop(
+        tn.name,
+        False,
+        telemetry.system_time() - start,
+      )
+      Error(Nil)
+    }
   }
 }
 
@@ -207,10 +208,8 @@ pub fn is_registered(name: String) -> Bool {
   }
 }
 
-/// Look up a `GlobalSubject` with polling and timeout.
-///
-/// Retries the lookup every `poll_interval_ms` until found or
-/// `timeout_ms` elapses.
+/// Look up with polling. Retries every poll_interval_ms until
+/// found or timeout_ms elapses.
 pub fn lookup_with_timeout(
   tn: TypedName(msg),
   timeout_ms: Int,
