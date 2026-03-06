@@ -10,7 +10,7 @@ pub fn main() {
 }
 
 pub fn version_test() {
-  should.equal(distribute.version(), "3.0.0")
+  should.equal(distribute.version(), "3.1.0")
 }
 
 pub fn facade_new_subject_send_receive_test() {
