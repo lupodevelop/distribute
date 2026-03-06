@@ -122,11 +122,34 @@ the fields together!
 | `distribute/cluster` | `net_kernel` start/connect/ping |
 | `distribute/codec` | Binary codecs for primitives + `subject()` |
 | `distribute/codec/composite` | Option, Result, Tuple codecs |
+| `distribute/codec/variant` | Build codecs for Custom Types (ADTs) |
 | `distribute/codec/tagged` | Tagged messages with version field |
 | `distribute/global` | `GlobalSubject(msg)`, `call`, `reply` |
 | `distribute/cluster/monitor` | `NodeUp`, `NodeDown` typed events |
 | `distribute/registry` | `TypedName(msg)`, `:global` registration |
 | `distribute/receiver` | Typed receive, OTP actor wrappers |
+
+### Custom Type Codecs
+
+Seamlessly encode and decode your Algebraic Data Types (enums) with a fluent builder.
+
+```gleam
+pub type MyMessage {
+  Text(String)
+  Ping
+}
+
+import distribute/codec
+import distribute/codec/variant
+
+let my_codec = 
+  variant.new()
+  |> variant.add(0, "Text", codec.string(), Text, fn(m) {
+    case m { Text(s) -> Ok(s); _ -> Error(Nil) }
+  })
+  |> variant.unit(1, "Ping", Ping, fn(m) { m == Ping })
+  |> variant.build()
+```
 
 ### Cluster Monitoring
 
