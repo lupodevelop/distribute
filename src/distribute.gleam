@@ -1,5 +1,4 @@
-//// Facade for common distributed operations: start a node, register
-//// actors, send messages, look things up.
+//// Facade for common distributed operations.
 
 import distribute/actor as dist_actor
 import distribute/cluster
@@ -95,6 +94,8 @@ pub fn subscribe(
   monitor.subscribe(user_subject)
 }
 
-pub fn unsubscribe(monitor_subject: process.Subject(monitor.ControlMessage)) -> Nil {
+pub fn unsubscribe(
+  monitor_subject: process.Subject(monitor.ControlMessage),
+) -> Nil {
   monitor.unsubscribe(monitor_subject)
 }

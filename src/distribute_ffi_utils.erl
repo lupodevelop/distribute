@@ -1,5 +1,5 @@
 -module(distribute_ffi_utils).
--export([to_atom_safe/1, system_time_ms/0, is_ok_atom/1, get_error_reason/1,
+-export([to_atom_safe/1, to_atom/1, system_time_ms/0, is_ok_atom/1, get_error_reason/1,
          create_subject/2, encode_subject/1, decode_subject_safe/1]).
 
 %% @doc Safely convert a binary, list, or atom to an existing atom.
@@ -20,6 +20,11 @@ to_atom_safe(Atom) when is_atom(Atom) ->
     {ok, Atom};
 to_atom_safe(_) ->
     {error, <<"badarg">>}.
+
+%% @doc Convert a binary to an atom (unsafe, but used for internal constants).
+-spec to_atom(binary()) -> atom().
+to_atom(Bin) when is_binary(Bin) ->
+    erlang:binary_to_atom(Bin, utf8).
 
 %% @doc Get current system time in milliseconds.
 -spec system_time_ms() -> integer().

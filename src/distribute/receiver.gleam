@@ -89,8 +89,8 @@ pub fn start_receiver(
 // Distributed actor (nil-tagged Subject, linked)
 // ---------------------------------------------------------------------------
 
-/// Start a gen_statem actor with a deterministic name-based tag.
-/// Remote nodes can reconstruct the Subject via `registry.lookup`.
+/// Start a distributed actor with a deterministic name-based tag.
+/// Remote nodes can reconstruct the Subject via registry.lookup.
 pub fn start_distributed_worker(
   name: String,
   initial_state: state,

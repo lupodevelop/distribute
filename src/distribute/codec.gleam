@@ -1,4 +1,4 @@
-/// Binary codecs for sending Gleam values across nodes.
+/// Binary codecs for Gleam values across nodes.
 import gleam/bit_array
 import gleam/erlang/process
 import gleam/int
@@ -35,7 +35,7 @@ pub type Encoder(a) =
 pub type Decoder(a) =
   fn(BitArray) -> Result(a, DecodeError)
 
-/// Like `Decoder` but returns leftover bytes for chaining.
+/// Like Decoder but returns leftover bytes for chaining.
 pub type SizedDecoder(a) =
   fn(BitArray) -> Result(#(a, BitArray), DecodeError)
 
@@ -67,7 +67,7 @@ pub fn decode_sized(
   decoder(data)
 }
 
-/// Turn a `SizedDecoder` into a `Decoder` (drops remaining bytes).
+/// Turn a SizedDecoder into a Decoder (drops remaining bytes).
 pub fn to_decoder(sized: SizedDecoder(a)) -> Decoder(a) {
   fn(data) {
     case sized(data) {
@@ -327,8 +327,8 @@ fn encode_subject_ffi(subject: process.Subject(BitArray)) -> BitArray
 @external(erlang, "distribute_ffi_utils", "decode_subject_safe")
 fn decode_subject_ffi(data: BitArray) -> Result(process.Subject(BitArray), Nil)
 
-/// Encode a `Subject(BitArray)` via `term_to_binary`. The PID
-/// inside carries node info, so it routes back cross-node.
+/// Encode a Subject(BitArray) via term_to_binary.
+/// The PID inside carries node info, so it routes back cross-node.
 pub fn subject_encoder() -> Encoder(process.Subject(BitArray)) {
   fn(sub) {
     let bytes = encode_subject_ffi(sub)
@@ -442,16 +442,7 @@ pub fn subject() -> Codec(process.Subject(BitArray)) {
   )
 }
 
-/// Transform a codec. `wrap` runs after decoding, `unwrap` before encoding.
-///
-/// ```gleam
-/// type UserId { UserId(Int) }
-///
-/// let user_id = codec.map(codec.int(), UserId, fn(uid) {
-///   let UserId(n) = uid
-///   n
-/// })
-/// ```
+/// Transform a codec. wrap runs after decoding, unwrap before encoding.
 pub fn map(c: Codec(a), wrap: fn(a) -> b, unwrap: fn(b) -> a) -> Codec(b) {
   Codec(
     encoder: fn(value) { c.encoder(unwrap(value)) },

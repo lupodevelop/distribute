@@ -1,3 +1,4 @@
+import distribute/internal/telemetry
 import gleam/dynamic.{type Dynamic}
 import gleam/erlang/process.{type Subject}
 import gleam/otp/actor
@@ -28,9 +29,9 @@ pub type ControlMessage {
   InternalEvent(ClusterEvent)
 }
 
-/// Subscribe to cluster events.
-/// Events will be sent to the provided `user_subject`.
-/// Returns the `Subject(ControlMessage)` for the monitor monitor actor.
+/// Subscribe to cluster topology events.
+/// Events are forwarded to the provided user_subject.
+/// Returns a control subject to stop the subscription.
 pub fn subscribe(
   user_subject: Subject(ClusterEvent),
 ) -> Result(Subject(ControlMessage), actor.StartError) {
@@ -60,6 +61,10 @@ pub fn subscribe(
   |> actor.on_message(fn(state, msg) {
     case msg {
       InternalEvent(event) -> {
+        case event {
+          NodeUp(node) -> telemetry.emit_node_event(node, "up")
+          NodeDown(node) -> telemetry.emit_node_event(node, "down")
+        }
         process.send(state, event)
         actor.continue(state)
       }

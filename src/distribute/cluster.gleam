@@ -60,9 +60,8 @@ fn get_error_reason(value: dynamic.Dynamic) -> String
 // ---------------------------------------------------------------------------
 
 /// Start a distributed BEAM node.
-///
-/// `name` must contain `@` (e.g. `"myapp@127.0.0.1"`).
-/// `cookie` must be ≤ 255 characters.
+/// Name must contain @ (e.g. myapp@127.0.0.1).
+/// Cookie must be 255 characters or fewer.
 pub fn start_node(name: String, cookie: String) -> Result(Nil, StartError) {
   case validate_node_name(name) {
     Error(e) -> Error(e)
@@ -80,7 +79,7 @@ pub fn start_node(name: String, cookie: String) -> Result(Nil, StartError) {
   }
 }
 
-/// Connect to a remote node. Returns `Ok(Nil)` on success.
+/// Connect to a remote node. Returns Ok(Nil) on success.
 pub fn connect(node: String) -> Result(Nil, ConnectError) {
   case string.contains(node, "@") {
     False -> Error(NodeNotFound)
@@ -108,7 +107,7 @@ pub fn self_node() -> String {
   self_node_ffi()
 }
 
-/// Ping a remote node. Returns `True` if it responds.
+/// Ping a remote node. Returns True if it responds.
 pub fn ping(node: String) -> Bool {
   ping_ffi(node)
 }
