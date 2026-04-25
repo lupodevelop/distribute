@@ -128,7 +128,7 @@ pub fn pool(
 ) -> Result(process.Pid, actor.StartError) {
   let name_prefix = registry.typed_name_to_string(typed_name)
   let specs =
-    list.range(1, size)
+    range(1, size)
     |> list.map(fn(i) {
       let worker_name = name_prefix <> "_" <> int.to_string(i)
       let worker_tn = registry.pool_member(typed_name, i)
@@ -162,5 +162,16 @@ pub fn pool(
   case static_supervisor.start(builder) {
     Ok(sup) -> Ok(sup.pid)
     Error(err) -> Error(err)
+  }
+}
+
+fn range(start: Int, stop: Int) -> List(Int) {
+  range_loop(start, stop, [])
+}
+
+fn range_loop(current: Int, stop: Int, acc: List(Int)) -> List(Int) {
+  case current > stop {
+    True -> list.reverse(acc)
+    False -> range_loop(current + 1, stop, [current, ..acc])
   }
 }
