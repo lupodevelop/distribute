@@ -12,6 +12,7 @@
 %% Input is validated (max 512 bytes, no null bytes) before creation.
 start_node(Name, Cookie) ->
     NameAtom = to_atom_force(Name),
+    CookieAtom = to_atom_force(Cookie),
     Type = case string:tokens(atom_to_list(NameAtom), "@") of
         [_, Host] ->
             case lists:member($., Host) of
@@ -21,8 +22,9 @@ start_node(Name, Cookie) ->
         _ -> shortnames
     end,
     try
+        erlang:set_cookie(CookieAtom),
         net_kernel:start([NameAtom, Type]),
-        erlang:set_cookie(node(), to_atom_force(Cookie)),
+        erlang:set_cookie(node(), CookieAtom),
         ok
     catch
         Class:Reason ->
