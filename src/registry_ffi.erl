@@ -1,41 +1,64 @@
 -module(registry_ffi).
--export([register/2, unregister/1, whereis/1,
-         is_ok_atom/1, is_already_registered/1, get_error_reason/1,
-         is_pid/1, dynamic_to_pid/1]).
+-export([register/2, unregister/1, whereis/1]).
 
 %% Uses binary names directly with global:register_name/2.
-%% No atom conversion - no atom table exhaustion risk.
+%% No atom conversion -- no atom table exhaustion risk.
 %% global:register_name accepts any Erlang term as a name.
+%%
+%% All functions return tagged tuples that map directly to Gleam Result/custom types.
+
+%% ----------------------------------------------------------------------------
+%% Local-ownership ACL: stateless `node(Pid) =:= node()` check
+%%
+%% `:global.unregister_name/1` has no built-in access control: any node
+%% may unregister any globally-registered name. To stop the "registry
+%% wipe" attack via unvalidated input, our `unregister/1` only forwards
+%% to `:global` when the name resolves to a PID running on THIS VM.
+%%
+%% An earlier draft kept a local ETS mirror of "names we registered";
+%% that introduces two flaws in a distributed system:
+%%   1. the table never gets pruned when a registered process dies,
+%%      causing an unbounded memory leak under churn;
+%%   2. when a name is reclaimed by a remote node after a local crash,
+%%      our stale ETS entry would falsely report ownership and let an
+%%      attacker drop a foreign actor's registration -- an ACL bypass.
+%%
+%% The single source of truth in a distributed system *is* :global.
+%% We ask :global where the PID lives and compare its node with ours.
+%% No state to leak, no staleness to bypass.
+%% ----------------------------------------------------------------------------
 
 register(Name, Pid) ->
     case erlang:is_pid(Pid) of
         true ->
             case global:register_name(Name, Pid) of
-                yes -> ok;
-                no -> {error, already_registered}
+                yes -> {ok, nil};
+                no  -> {error, already_exists}
             end;
         false ->
-            {error, <<"not_a_pid">>}
+            {error, invalid_process}
     end.
 
 unregister(Name) ->
-    global:unregister_name(Name),
-    ok.
+    case global:whereis_name(Name) of
+        undefined ->
+            %% Name not registered at all -- nothing to do, but report
+            %% so the caller can distinguish "I removed it" from
+            %% "it wasn't there" when that distinction matters.
+            {error, not_found};
+        Pid ->
+            case node(Pid) =:= node() of
+                true ->
+                    global:unregister_name(Name),
+                    {ok, nil};
+                false ->
+                    %% Owner runs on another node -- ACL refuses.
+                    {error, not_owned}
+            end
+    end.
 
 whereis(Name) ->
     case global:whereis_name(Name) of
-        undefined -> not_found;
-        Pid when erlang:is_pid(Pid) -> Pid;
-        _ -> not_found
+        undefined -> {error, nil};
+        Pid       -> {ok, Pid}
     end.
-
-%% Helpers for Gleam FFI result classification (delegate to shared utils)
-is_ok_atom(V) -> distribute_ffi_utils:is_ok_atom(V).
-get_error_reason(V) -> distribute_ffi_utils:get_error_reason(V).
-
-is_already_registered({error, already_registered}) -> true;
-is_already_registered(_) -> false.
-
-is_pid(Value) -> erlang:is_pid(Value).
-
-dynamic_to_pid(Pid) -> Pid.
