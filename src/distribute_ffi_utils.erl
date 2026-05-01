@@ -74,17 +74,18 @@ ensure_counter() ->
 current_budget() ->
     persistent_term:get(?BUDGET_VALUE_KEY, ?DEFAULT_BUDGET).
 
-%% Atomically reserve one budget unit. Returns true if the reservation
-%% succeeded (caller may create the atom); false if the budget is full
-%% (and decrements its speculative add to keep the counter accurate).
+%% Atomically reserve one budget unit. Returns `{ok, Ref}` if the reservation
+%% succeeded (caller may create the atom); `{error, atom_budget_exceeded}` if
+%% the budget is full (and decrements its speculative add to keep the counter
+%% accurate).
 try_reserve_atom() ->
     Ref = ensure_counter(),
     New = atomics:add_get(Ref, 1, 1),
     case New =< current_budget() of
-        true -> true;
+        true -> {ok, Ref};
         false ->
             atomics:sub(Ref, 1, 1),
-            false
+            {error, atom_budget_exceeded}
     end.
 
 %% Public: reset the counter. `@internal` on the Gleam side -- only
@@ -101,19 +102,27 @@ atom_budget_reset() ->
 %% The `catch error:badarg` clause is the documented signal from
 %% `binary_to_existing_atom/2` that the atom is not yet interned --
 %% the *expected* path that triggers the budgeted creation below.
-%% Catching all classes (`catch _:_`) would also silently swallow
-%% a real bug in this code path (e.g. a future refactor that hands
-%% in a non-binary, an unrelated `error:system_limit` on a saturated
-%% atom table) and surface it as a confusing "atom_budget_exceeded".
-%% Narrowing to `error:badarg` keeps the recovery scoped and lets
-%% genuine faults propagate the way the rest of the FFI does.
+%% Catching all classes (`catch _:_`) would silently swallow real bugs in
+%% this code path (for example a future refactor that hands in a non-binary).
+%% We only catch `error:badarg` there.
+%%
+%% On the creation path, we catch `error:system_limit` from
+%% `binary_to_atom/2` so atom-table saturation degrades to a typed
+%% refusal instead of crashing the caller.
 budget_aware_atom_create(Bin) ->
     try
         {ok, binary_to_existing_atom(Bin, utf8)}
     catch error:badarg ->
         case try_reserve_atom() of
-            true -> {ok, binary_to_atom(Bin, utf8)};
-            false -> {error, atom_budget_exceeded}
+            {error, atom_budget_exceeded} ->
+                {error, atom_budget_exceeded};
+            {ok, Ref} ->
+                try
+                    {ok, binary_to_atom(Bin, utf8)}
+                catch error:system_limit ->
+                    atomics:sub(Ref, 1, 1),
+                    {error, atom_budget_exceeded}
+                end
         end
     end.
 
@@ -186,7 +195,7 @@ exit_shutdown(Pid) ->
 %% atoms that already exist; falls back to binary_to_atom only after
 %% format validation has passed.
 -spec to_node_atom_safe(Input :: binary() | list()) ->
-    {ok, atom()} | {error, invalid_node_name}.
+    {ok, atom()} | {error, invalid_node_name} | {error, atom_budget_exceeded}.
 to_node_atom_safe(Bin) when is_list(Bin) ->
     to_node_atom_safe(list_to_binary(Bin));
 to_node_atom_safe(Bin) when is_binary(Bin) ->
@@ -202,7 +211,7 @@ to_node_atom_safe(_) ->
 %% Cookies must be valid Erlang atoms in the printable range. Allowed:
 %% [a-zA-Z0-9_-], 1..255 bytes. No `@`, no whitespace, no control chars.
 -spec to_cookie_atom_safe(Input :: binary() | list()) ->
-    {ok, atom()} | {error, invalid_cookie}.
+    {ok, atom()} | {error, invalid_cookie} | {error, atom_budget_exceeded}.
 to_cookie_atom_safe(Bin) when is_list(Bin) ->
     to_cookie_atom_safe(list_to_binary(Bin));
 to_cookie_atom_safe(Bin) when is_binary(Bin) ->
