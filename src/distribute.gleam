@@ -131,6 +131,7 @@ import distribute/config
 import distribute/global
 import distribute/receiver
 import distribute/registry
+import distribute/telemetry
 import gleam/erlang/process
 import gleam/otp/actor
 import gleam/otp/supervision
@@ -250,6 +251,22 @@ pub fn unsubscribe(
   listener: process.Subject(ClusterEvent),
 ) {
   cluster.unsubscribe(monitor, listener)
+}
+
+// -- Telemetry ---------------------------------------------------------------
+
+pub type TelemetryEvent =
+  telemetry.Event
+
+pub type TelemetrySink =
+  telemetry.EventSink
+
+/// Install (or replace) the global telemetry sink for observability.
+/// This single opt-in sink receives all load-bearing events from the library
+/// (registry, atom budget, payload limits, codec failures, timeouts).
+/// See `distribute/telemetry` for the full semantics and event structure.
+pub fn install_telemetry(sink: TelemetrySink) -> Nil {
+  telemetry.install(sink)
 }
 
 // -- Handler signatures ------------------------------------------------------
