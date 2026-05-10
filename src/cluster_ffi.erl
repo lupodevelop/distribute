@@ -61,8 +61,8 @@ start_node(Name, Cookie) ->
                 end
         end
     catch
-        _:Caught ->
-            R2 = iolist_to_binary(io_lib:format("~p", [Caught])),
+        error:CaughtReason:CaughtStack ->
+            R2 = iolist_to_binary(io_lib:format("~p:~p", [CaughtReason, CaughtStack])),
             {error, {start_failed, R2}}
     end.
 
