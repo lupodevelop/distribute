@@ -36,10 +36,20 @@ pub fn option_sized_decoder(inner: SizedDecoder(a)) -> SizedDecoder(Option(a)) {
   }
 }
 
+/// Strict top-level `Option(a)` decoder. `None` is one byte (`0`)
+/// followed by EOF; `Some(a)` is `1` followed by `a`'s encoded form.
+///
+/// The earlier `<<0, _:bytes>>` pattern matched a `None` tag plus any
+/// number of trailing bytes, mirroring the smuggling vector that we
+/// closed inside `tuple2`/`tuple3`. The `Some` branch is already strict
+/// because `inner` is itself a top-level `Decoder(a)` (built via
+/// `to_decoder`).
 pub fn option_decoder(inner: Decoder(a)) -> Decoder(Option(a)) {
   fn(data) {
     case data {
-      <<0, _:bytes>> -> Ok(option.None)
+      <<0>> -> Ok(option.None)
+      <<0, _, _:bytes>> ->
+        Error(InvalidBinary("trailing bytes after option None tag"))
       <<1, rest:bytes>> -> {
         use value <- result.try(inner(rest))
         Ok(option.Some(value))
@@ -115,12 +125,22 @@ pub fn result_decoder(
 // ============================================================================
 
 /// Encoder for `#(a, b)`. First element is length-prefixed (32-bit).
-pub fn tuple2_encoder(first: Encoder(a), second: Encoder(b)) -> Encoder(#(a, b)) {
+///
+/// The length prefix is validated against the unsigned-32 bound. A
+/// first element larger than 4 GiB would silently truncate the prefix
+/// and corrupt the wire frame. Mirrors the bound enforced by
+/// `string_encoder` / `bitarray_encoder` / `list_encoder` /
+/// `subject_encoder` / `tagged.encoder`.
+pub fn tuple2_encoder(
+  first: Encoder(a),
+  second: Encoder(b),
+) -> Encoder(#(a, b)) {
   fn(tuple) {
     let #(a, b) = tuple
     use encoded_a <- result.try(first(a))
     use encoded_b <- result.try(second(b))
     let len_a = bit_array.byte_size(encoded_a)
+    use _ <- result.try(codec.check_32bit_length(len_a, "tuple2 first element"))
     Ok(bit_array.concat([<<len_a:32>>, encoded_a, encoded_b]))
   }
 }
@@ -137,7 +157,17 @@ pub fn tuple2_sized_decoder(
           bit_array.slice(rest, 0, len_a)
           |> result.replace_error(InsufficientData("tuple2 first")),
         )
-        use #(a, _) <- result.try(first(first_data))
+        // Strict: the inner decoder must consume exactly `len_a` bytes.
+        // Anything left over inside the slice is data smuggled past the
+        // length prefix (e.g. attacker declares len_a = 100_000, fills
+        // 8 valid bytes and 99_992 hostile bytes); silently ignoring
+        // those bytes turns the slice into an oracle for arbitrary
+        // payloads inside what looks like a tuple element.
+        use #(a, first_leftover) <- result.try(first(first_data))
+        use _ <- result.try(reject_inner_trailing(
+          first_leftover,
+          "tuple2 first",
+        ))
         use after_first <- result.try(
           bit_array.slice(rest, len_a, rest_size - len_a)
           |> result.replace_error(InsufficientData("tuple2 second")),
@@ -162,6 +192,9 @@ pub fn tuple2_decoder(
 // ============================================================================
 
 /// Encoder for `#(a, b, c)`. First two elements are length-prefixed (32-bit).
+///
+/// Both length prefixes are validated against the unsigned-32 bound;
+/// see `tuple2_encoder` for the rationale.
 pub fn tuple3_encoder(
   first: Encoder(a),
   second: Encoder(b),
@@ -174,6 +207,8 @@ pub fn tuple3_encoder(
     use encoded_c <- result.try(third(c))
     let len_a = bit_array.byte_size(encoded_a)
     let len_b = bit_array.byte_size(encoded_b)
+    use _ <- result.try(codec.check_32bit_length(len_a, "tuple3 first element"))
+    use _ <- result.try(codec.check_32bit_length(len_b, "tuple3 second element"))
     Ok(
       bit_array.concat([
         <<len_a:32>>,
@@ -199,7 +234,11 @@ pub fn tuple3_sized_decoder(
           bit_array.slice(rest, 0, len_a)
           |> result.replace_error(InsufficientData("tuple3 first")),
         )
-        use #(a, _) <- result.try(first(first_data))
+        use #(a, first_leftover) <- result.try(first(first_data))
+        use _ <- result.try(reject_inner_trailing(
+          first_leftover,
+          "tuple3 first",
+        ))
         use after_first <- result.try(
           bit_array.slice(rest, len_a, rest_size - len_a)
           |> result.replace_error(InsufficientData("tuple3 after first")),
@@ -211,7 +250,11 @@ pub fn tuple3_sized_decoder(
               bit_array.slice(rest2, 0, len_b)
               |> result.replace_error(InsufficientData("tuple3 second")),
             )
-            use #(b, _) <- result.try(second(second_data))
+            use #(b, second_leftover) <- result.try(second(second_data))
+            use _ <- result.try(reject_inner_trailing(
+              second_leftover,
+              "tuple3 second",
+            ))
             use third_data <- result.try(
               bit_array.slice(rest2, len_b, rest2_size - len_b)
               |> result.replace_error(InsufficientData("tuple3 third")),
@@ -227,6 +270,25 @@ pub fn tuple3_sized_decoder(
   }
 }
 
+/// Reject data smuggled past the inner decoder. The slice we hand to the
+/// inner decoder is sized exactly to `len_a`/`len_b`; if the decoder
+/// returned remaining bytes, the encoder declared a slice longer than
+/// the value consumed. A hostile sender hiding payload inside the
+/// length-prefixed envelope. Surface as `InvalidBinary` instead of
+/// silently passing bytes through.
+fn reject_inner_trailing(
+  rest: BitArray,
+  where_label: String,
+) -> Result(Nil, codec.DecodeError) {
+  case rest {
+    <<>> -> Ok(Nil)
+    _ ->
+      Error(InvalidBinary(
+        "trailing bytes smuggled inside " <> where_label <> " element",
+      ))
+  }
+}
+
 pub fn tuple3_decoder(
   first: SizedDecoder(a),
   second: SizedDecoder(b),
@@ -238,6 +300,20 @@ pub fn tuple3_decoder(
 // ============================================================================
 // Bundled Codec versions
 // ============================================================================
+
+pub fn result(
+  ok_codec: codec.Codec(a),
+  error_codec: codec.Codec(e),
+) -> codec.Codec(Result(a, e)) {
+  codec.Codec(
+    encoder: result_encoder(ok_codec.encoder, error_codec.encoder),
+    decoder: result_decoder(ok_codec.decoder, error_codec.decoder),
+    sized_decoder: result_sized_decoder(
+      ok_codec.sized_decoder,
+      error_codec.sized_decoder,
+    ),
+  )
+}
 
 pub fn option(inner: codec.Codec(a)) -> codec.Codec(Option(a)) {
   codec.Codec(
