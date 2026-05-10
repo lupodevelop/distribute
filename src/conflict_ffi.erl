@@ -65,7 +65,8 @@ register_with_resolver(_Name, _Pid, _NotAFun) ->
 
 %% Run user resolver in an isolated worker. Returns the Pid the
 %% caller (`:global`) wants for the survivor, or `none` to kill
-%% both. Never raises, never blocks past TimeoutMs.
+%% both. Never raises; timeout teardown is bounded and cannot
+%% wait forever on monitor delivery.
 safe_invoke(Resolver, Name, Pid1, Pid2, TimeoutMs) ->
     Parent = self(),
     Ref = make_ref(),
@@ -146,8 +147,17 @@ cleanup_worker_monitor(WorkerMon) ->
     ok.
 
 await_worker_down(WorkerMon, Worker) ->
-    receive
-        {'DOWN', WorkerMon, process, Worker, _Reason} -> ok
+    case erlang:is_process_alive(Worker) of
+        false ->
+            erlang:demonitor(WorkerMon, [flush]),
+            ok;
+        true ->
+            receive
+                {'DOWN', WorkerMon, process, Worker, _Reason} -> ok
+            after 50 ->
+                erlang:demonitor(WorkerMon, [flush]),
+                ok
+            end
     end.
 
 drain_resolver_reply(Ref) ->
