@@ -106,8 +106,8 @@ self_node() ->
     atom_to_binary(node(), utf8).
 
 %% Whether the local node is running BEAM distribution. Returns true iff
-%% net_kernel has been started (`erlang:is_alive/0`). Authoritative -- does
-%% not rely on the textual form of the node name.
+%% net_kernel has been started (`erlang:is_alive/0`). This is authoritative
+%% and does not rely on the textual form of the node name.
 is_alive() ->
     erlang:is_alive().
 
@@ -120,7 +120,7 @@ decode_node_event(_) ->
     {error, nil}.
 
 %% Ping a remote node. Returns `false` for invalid names AND for
-%% unreachable peers -- both cases are "cannot reach" semantically.
+%% unreachable peers. Both cases are "cannot reach" semantically.
 %%
 %% Atom-budget exhaustion is observable via the telemetry sink even
 %% though the public Gleam return type is `Bool`. We emit

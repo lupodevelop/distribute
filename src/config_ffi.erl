@@ -4,7 +4,7 @@
          put_conflict_resolver_timeout/1,
          get_conflict_resolver_timeout/0]).
 
-%% Atom keys in persistent_term -- never exposed to Gleam side.
+%% Atom keys in persistent_term are never exposed to the Gleam side.
 -define(KEY, distribute_config).
 -define(BUDGET_VALUE_KEY, distribute_atom_budget).
 -define(CONFLICT_TIMEOUT_KEY, distribute_conflict_resolver_timeout).
@@ -25,7 +25,7 @@ put_config(Config) ->
 get_config(Default) ->
     persistent_term:get(?KEY, Default).
 
-%% Atom budget setter -- written as a separate persistent_term slot
+%% Atom budget setter written as a separate persistent_term slot
 %% so the FFI atom helpers can read it without decoding the Gleam
 %% Config tuple. Called from Gleam-side `configure` after the main
 %% Config write succeeds.
@@ -33,7 +33,7 @@ put_atom_budget(N) when is_integer(N), N > 0 ->
     persistent_term:put(?BUDGET_VALUE_KEY, N),
     nil.
 
-%% Conflict-resolver timeout setter -- separate persistent_term slot
+%% Conflict-resolver timeout setter uses a separate persistent_term slot
 %% so `conflict_ffi:safe_invoke/5` can read the deadline without
 %% decoding the Gleam Config tuple. Called from Gleam-side
 %% `configure` after the main Config write succeeds.
@@ -43,7 +43,7 @@ put_conflict_resolver_timeout(N) when is_integer(N), N > 0 ->
 
 %% Read the configured conflict-resolver deadline. Returns the
 %% built-in default (1 000 ms) if `configure/1` has not been
-%% called -- mirrors `config:default()` so an unconfigured node
+%% called. Mirrors `config:default()` so an unconfigured node
 %% has the same timeout as a freshly-configured one.
 get_conflict_resolver_timeout() ->
     persistent_term:get(?CONFLICT_TIMEOUT_KEY, ?DEFAULT_CONFLICT_TIMEOUT_MS).
