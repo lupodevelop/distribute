@@ -1,4 +1,4 @@
-//// `distribute` -- Typed messaging for the BEAM.
+//// `distribute`: Typed messaging for the BEAM.
 ////
 //// This library provides a safety layer over Erlang's native distribution.
 //// It focuses on hardening the **Node Boundary**: the physical edge where
@@ -44,7 +44,7 @@
 //// // 3. Start a globally registered, supervised singleton
 //// let assert Ok(pid) = distribute.start_supervised(counter, 0, handler)
 ////
-//// // 4. Call from any node -- monitor-based TargetDown detection,
+//// // 4. Call from any node. Monitor-based TargetDown detection,
 ////    default timeout from config
 //// let assert Ok(val) = distribute.call(gs, Get, codec.int_decoder())
 //// ```
@@ -53,12 +53,12 @@
 ////
 //// Every long-running operation has two shapes:
 ////
-//// - The **default form** reads from `config.get()` -- this is the path
+//// - The **default form** reads from `config.get()`. This is the path
 ////   you want 90% of the time. A single `configure(...)` at boot tunes
 ////   the whole surface (`call`, `receive`, `start_actor`,
 ////   `start_registered`, `start_supervised`, `pool`, `child_spec`,
 ////   `call_isolated`).
-//// - The **`_with_timeout` form** is the explicit override -- pick it
+//// - The **`_with_timeout` form** is the explicit override. Pick it
 ////   only when the request has a hard deadline that diverges from
 ////   `config.default_*`.
 ////
@@ -118,7 +118,7 @@
 //// `distribute/codec`, `distribute/receiver`, `distribute/cluster`,
 //// `distribute/cluster_monitor`, `distribute/codec/composite`,
 //// `distribute/codec/tagged`, `distribute/config`) remain available for
-//// advanced cases not covered by the facade -- e.g. `whereis`,
+//// advanced cases not covered by the facade. e.g. `whereis`,
 //// `register_pid`, `register_typed`, `from_pid`, `from_subject`,
 //// `lookup_with_timeout`, `lookup_async`, `start_registered_observed`,
 //// `receive_typed`, `selecting_typed`.
@@ -139,7 +139,7 @@ import gleam/otp/supervision
 // -- Boot & config -----------------------------------------------------------
 
 /// Library version, hardcoded. Must stay in sync with `gleam.toml`
-/// at release time -- Gleam has no compile-time API to read the
+/// at release time. Gleam has no compile-time API to read the
 /// manifest, so this is a release-time discipline, not a runtime
 /// invariant.
 pub fn version() -> String {
@@ -203,7 +203,7 @@ pub fn is_distributed() -> Bool {
 }
 
 /// Whether this node has at least one connected peer. *Not* a health
-/// check -- a single-node deployment is operationally fine and will
+/// check. A single-node deployment is operationally fine and will
 /// return `False` here. Use this only to gate cluster-wide operations.
 pub fn has_peers() -> Bool {
   cluster.has_peers()
@@ -407,7 +407,7 @@ pub fn start_actor_with_timeout(
 /// Start a named actor with a decode-error callback. Useful for
 /// logging or metering malformed messages across nodes (e.g. during
 /// rolling deploys with mismatched codec versions). Uses
-/// `config.get().default_init_timeout_ms` -- if you need a custom
+/// `config.get().default_init_timeout_ms`. If you need a custom
 /// init timeout, drop down to `actor.start_observed` directly.
 pub fn start_actor_observed(
   typed_name: TypedName(msg),
@@ -566,7 +566,7 @@ pub fn receive_with_timeout(
 /// Uses `config.get().default_call_timeout_ms`. Use `call_with_timeout/4`
 /// for an explicit timeout.
 ///
-/// ## Late-reply caveat -- choose `call_isolated` for long-running callers
+/// ## Late-reply caveat: choose `call_isolated` for long-running callers
 ///
 /// `call` is the cheap default. It is **safe** for short-lived callers
 /// (CLI tools, request handlers, scripts) whose process exits shortly
@@ -594,7 +594,7 @@ pub fn call(
 }
 
 /// Like `call`, with an explicit timeout. Inherits the same
-/// late-reply caveat -- see `call/3`.
+/// late-reply caveat. See `call/3`.
 pub fn call_with_timeout(
   target: GlobalSubject(req),
   make_request: fn(process.Subject(BitArray)) -> req,
