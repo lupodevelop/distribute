@@ -14,13 +14,13 @@
 %% that loops `connect/ping` over millions of *valid* names exhausts the
 %% table and crashes the entire VM with `system_limit (atom_table_full)`.
 %%
-%% Format validation alone cannot stop this -- only counting can. We track
+%% Format validation alone cannot stop this. Only counting can. We track
 %% how many *fresh* atoms (i.e. not already interned) have been created
 %% through our helpers, and refuse further creation past a configurable
 %% budget. The counter lives in an `atomics` ref shared across schedulers
 %% so the check is lock-free and concurrency-safe.
 %%
-%% Existing atoms (already in the table) are always allowed -- they cost
+%% Existing atoms (already in the table) are always allowed. They cost
 %% nothing extra. Only the first creation of a name burns one budget unit.
 %% ----------------------------------------------------------------------------
 
@@ -29,7 +29,7 @@
 -define(DEFAULT_BUDGET, 10_000).
 
 %% Lazy-init the atomics counter, race-safe and **without**
-%% `persistent_term:put` -- the previous design rewrote the term once
+%% `persistent_term:put` was the previous design and rewrote the term once
 %% per concurrent first-caller, and every overwrite of a `persistent_term`
 %% slot triggers a global GC pass across every process in the VM.
 %% Under a `cluster.health` fan-out (50 parallel pings, all hitting
@@ -88,7 +88,7 @@ try_reserve_atom() ->
             {error, atom_budget_exceeded}
     end.
 
-%% Public: reset the counter. `@internal` on the Gleam side -- only
+%% Public: reset the counter. `@internal` on the Gleam side means only
 %% intended for tests that want to reuse the budget across cases.
 atom_budget_reset() ->
     Ref = ensure_counter(),
@@ -100,7 +100,7 @@ atom_budget_reset() ->
 %% `{ok, Atom}`, `{error, invalid_format}` or `{error, atom_budget_exceeded}`.
 %%
 %% The `catch error:badarg` clause is the documented signal from
-%% `binary_to_existing_atom/2` that the atom is not yet interned --
+%% `binary_to_existing_atom/2` that the atom is not yet interned.
 %% the *expected* path that triggers the budgeted creation below.
 %% Catching all classes (`catch _:_`) would silently swallow real bugs in
 %% this code path (for example a future refactor that hands in a non-binary).
@@ -130,7 +130,7 @@ budget_aware_atom_create(Bin) ->
 %%
 %% Strictly non-decreasing; immune to NTP slew, leap seconds, and
 %% manual clock adjustments. The right tool for "is the deadline
-%% reached?" / "how much budget is left?" -- a wall-clock skew of
+%% reached?" / "how much budget is left?" and a wall-clock skew of
 %% even a few hundred ms could otherwise make a deadline check go
 %% backwards and never expire.
 -spec monotonic_ms() -> integer().
@@ -171,7 +171,7 @@ subject_tag_matches_name(_, _) ->
 
 %% @doc Send `shutdown` exit signal to a process.
 %%
-%% Catchable by actors that trap exits -- they receive
+%% Catchable by actors that trap exits, they receive
 %% `{'EXIT', From, shutdown}` and can run cleanup before dying. Equivalent
 %% to what an OTP supervisor sends as the first phase of `terminate_child`.
 %% A process that does NOT trap exits dies immediately.

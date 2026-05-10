@@ -2,7 +2,7 @@
 -export([register/2, unregister/1, whereis/1]).
 
 %% Uses binary names directly with global:register_name/2.
-%% No atom conversion -- no atom table exhaustion risk.
+%% No atom conversion. No atom table exhaustion risk.
 %% global:register_name accepts any Erlang term as a name.
 %%
 %% All functions return tagged tuples that map directly to Gleam Result/custom types.
@@ -21,7 +21,7 @@
 %%      causing an unbounded memory leak under churn;
 %%   2. when a name is reclaimed by a remote node after a local crash,
 %%      our stale ETS entry would falsely report ownership and let an
-%%      attacker drop a foreign actor's registration -- an ACL bypass.
+%%      attacker drop a foreign actor's registration. An ACL bypass.
 %%
 %% The single source of truth in a distributed system *is* :global.
 %% We ask :global where the PID lives and compare its node with ours.
@@ -42,7 +42,7 @@ register(Name, Pid) ->
 unregister(Name) ->
     case global:whereis_name(Name) of
         undefined ->
-            %% Name not registered at all -- nothing to do, but report
+            %% Name not registered at all. Nothing to do, but report
             %% so the caller can distinguish "I removed it" from
             %% "it wasn't there" when that distinction matters.
             {error, not_found};
@@ -52,7 +52,7 @@ unregister(Name) ->
                     global:unregister_name(Name),
                     {ok, nil};
                 false ->
-                    %% Owner runs on another node -- ACL refuses.
+                    %% Owner runs on another node. ACL refuses.
                     {error, not_owned}
             end
     end.
