@@ -5,4 +5,9 @@ erl_crash.dump
 **/build
 *.log
 /notes
-
+BACKENDS.md
+.markdownlint-cli2.jsonc
+.tmp-checks/docs.exit
+.tmp-checks/format.exit
+.tmp-checks/gleam-test.exit
+.tmp-checks/markdownlint.exit
