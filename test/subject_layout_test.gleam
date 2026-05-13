@@ -10,7 +10,7 @@ fn check_layout_ffi(subject: process.Subject(msg)) -> Bool
 /// `{subject, Pid, Tag}` tuple layout.
 pub fn subject_layout_is_stable_test() {
   let subj: process.Subject(String) = process.new_subject()
-  
+
   check_layout_ffi(subj)
   |> should.be_true
 }
