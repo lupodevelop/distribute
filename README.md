@@ -1,8 +1,10 @@
-<!-- markdownlint-disable MD033 -->
+<!-- markdownlint-disable MD033 MD060 -->
 
 # distribute
 
-<img src="assets/img/logo.png" alt="logo" height="218" />
+<p align="center">
+  <img src="https://raw.githubusercontent.com/lupodevelop/distribute/d29c993/assets/img/distribute.png" alt="distribute logo" width="200" />
+</p>
 
 Typed distributed messaging for Gleam on the BEAM.
 
