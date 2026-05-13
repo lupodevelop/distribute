@@ -1,23 +1,19 @@
+<!-- markdownlint-disable MD033 -->
+
 # distribute
 
-<p align="center">
-  <img src="assets/img/distribute.png" alt="distribute logo" width="200" />
-</p>
+<img src="assets/img/logo.png" alt="logo" height="218" />
 
 Typed distributed messaging for Gleam on the BEAM.
 
 [![Package Version](https://img.shields.io/hexpm/v/distribute)](https://hex.pm/packages/distribute)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/distribute/)
 
-## What this is
-
-Erlang already gives you distribution, but from Gleam you lose type info at
-the node boundary — everything crosses the wire as raw terms. `distribute`
-puts binary codecs in front of `:global` and `Subject` so the compiler can
-catch mismatches before messages leave the process.
-
-"Typed" here means checked at encode/decode boundaries. There is no shared
-type system across nodes — the BEAM doesn't work that way.
+`distribute` is a thin typed safety layer over Erlang's distribution
+primitives. It puts binary codecs in front of `:global` and `Subject` so
+the compiler catches protocol mismatches before messages leave the
+process. Payload size and dead-target detection are enforced at every
+I/O boundary, so a misbehaving peer cannot OOM your node or hang it.
 
 ## Install
 
@@ -25,130 +21,87 @@ type system across nodes — the BEAM doesn't work that way.
 gleam add distribute
 ```
 
-## Usage
+Requires Gleam 1.16 or newer, Erlang targetÉ only.
 
-### Fire-and-forget
-
-Define a `TypedName(msg)` that pairs a name with a codec, then use it on
-both sides. The compiler won't let you register a `String` actor and look
-it up as `Int`.
+## 30-second taste
 
 ```gleam
 import distribute
 import distribute/codec
-import distribute/registry
 import distribute/receiver
 
-// one TypedName, shared across the codebase
-let greeter = registry.named("greeter", codec.string())
+let greeter = distribute.named("greeter", codec.string())
 
-// start + register
-let assert Ok(gs) = distribute.start_actor(greeter, Nil, fn(msg, _state) {
-  io.println("Got: " <> msg)
-  receiver.Continue(Nil)
-})
-let assert Ok(Nil) = distribute.register(greeter, gs)
+let assert Ok(_gs) =
+  distribute.start_registered(greeter, Nil, fn(msg, _state) {
+    io.println("got: " <> msg)
+    receiver.Continue(Nil)
+  })
 
-// from any node
-let assert Ok(remote) = distribute.lookup(greeter)
-let assert Ok(Nil) = distribute.send(remote, "hello")
+let assert Ok(target) = distribute.lookup(greeter)
+let assert Ok(Nil) = distribute.send(target, "hello")
 ```
 
-### Request / response
+For the full walkthrough see [docs/quickstart.md](./docs/quickstart.md).
 
-Include a reply `Subject(BitArray)` in your message type and use
-`codec.subject()` to serialize it. The `Subject` carries node info, so
-replies route back across nodes automatically.
+## Documentation
 
-```gleam
-import distribute/codec
-import distribute/global
-import distribute/receiver
-import gleam/erlang/process
+All long-form docs live in [`docs/`](./docs/README.md):
 
-type CounterMsg {
-  Inc(Int)
-  Get(reply: process.Subject(BitArray))
-}
+- [Quickstart](./docs/quickstart.md). Boot, configure, send.
+- [Recipes](./docs/recipes.md). Counter, pool, versioned protocol,
+  cluster events, custom records.
+- [Actors and registry](./docs/actors_and_registry.md).
+- [Messaging](./docs/messaging.md). `send` / `receive` / `call`.
+- [Codecs and types](./docs/codecs_and_types.md). Wire format, custom
+  records, tagged messages.
+- [Safety and limits](./docs/safety_and_limits.md). Payload limits,
+  threat model, recommended sizing.
 
-// handler side
-fn handle(msg, state) {
-  case msg {
-    Inc(n) -> receiver.Continue(state + n)
-    Get(reply) -> {
-      let _ = global.reply(reply, state, codec.int_encoder())
-      receiver.Continue(state)
-    }
-  }
-}
+## What you get
 
-// caller side
-let assert Ok(count) = global.call(counter, Get, codec.int_decoder(), 5000)
-```
-
-`global.call` creates a temporary subject, sends the request, waits for
-the response, decodes it. Same idea as `gen_server:call`.
-
-### Codecs
-
-Primitives: `codec.int()`, `codec.string()`, `codec.float()`, `codec.bool()`,
-`codec.bitarray()`, `codec.nil()`.
-
-Composites: `codec.list(c)`, `codec.subject()`, `codec.map(c, wrap, unwrap)`,
-`composite.option(c)`, `composite.result(ok, err)`,
-`composite.tuple2(a, b)`, `composite.tuple3(a, b, c)`.
-
-For your own types, use `codec.map`:
-
-```gleam
-type UserId { UserId(Int) }
-
-let user_id_codec = codec.map(codec.int(), UserId, fn(uid) {
-  let UserId(n) = uid
-  n
-})
-```
-
-Gleam has no derive macros or reflection, so codecs for complex types
-are manual. The combinators handle the serialization so you just wire
-the fields together!
-
-## Modules
-
-| Module | Does |
-|--------|------|
-| `distribute` | Facade — start node, connect, send, lookup |
-| `distribute/actor` | Named actors, supervision, pools |
-| `distribute/cluster` | `net_kernel` start/connect/ping |
-| `distribute/codec` | Binary codecs for primitives + `subject()` |
-| `distribute/codec/composite` | Option, Result, Tuple codecs |
-| `distribute/codec/tagged` | Tagged messages with version field |
-| `distribute/global` | `GlobalSubject(msg)`, `call`, `reply` |
-| `distribute/registry` | `TypedName(msg)`, `:global` registration |
-| `distribute/receiver` | Typed receive, OTP actor wrappers |
+- **Typed boundary.** `TypedName(msg)` binds a name to a codec.
+  Registration and lookup share the same `msg` type, and the compiler
+  rejects mismatches.
+- **Hard payload caps.** `max_payload_size_bytes` is enforced before
+  encode and before decode on every path: `send`, `receive`, `call`,
+  `reply`, actor handlers, selectors.
+- **Fast-fail calls.** `global.call` monitors the target. A dead target
+  returns `Error(TargetDown)` immediately. Late replies and DOWN
+  messages are drained from the caller's mailbox.
+- **OTP-native.** Real OTP gen_server-flavored actors via
+  `gleam_otp/actor`, real supervisors, real child specs. `observer`,
+  `sys:get_status`, restart strategies all work. No magic.
+- **Single-source codec.** Encoding and decoding happen through one
+  `Codec(a)` value. Combinators (`map`, `list`, `option`, `tuple`,
+  `tagged`) cover the common cases without macros.
 
 ## Caveats
 
-**What the types catch** — within one codebase, `TypedName` and
-`GlobalSubject` prevent mixing up message types at compile time.
-
-**What they don't** — two separate codebases using different codecs for
-the same name. The codec will reject the binary at runtime, not at compile
-time. Same for Erlang code sending raw terms to a `distribute` actor.
-
-**Subject construction** — Gleam's `Subject` is opaque. To build one from
-a remote PID and a deterministic tag (how registry lookup works), we
-construct the `{subject, Pid, Tag}` tuple in
-[one Erlang function](src/distribute_ffi_utils.erl). If `gleam_erlang`
-changes the internal representation, that single function needs updating.
-
-**No auto-derive** — Gleam doesn't have macros. Complex message codecs
-are manual. The combinators (`map`, `list`, `option`, `tuple2`, etc.)
-keep it manageable, but it's not zero-boilerplate.
+- **Two codebases, one wire.** `TypedName` enforces type safety inside
+  one codebase. Mismatched codecs across separate codebases produce
+  runtime decode errors, not compile errors.
+- **No auto-derive.** Gleam has no macros, so complex codecs are
+  manual. The combinators keep them short.
+- **`terminate` caveat in `gleam_otp/actor` 1.x.** External shutdown
+  paths do not currently invoke an OTP-style `terminate` callback. If
+  an actor owns files, sockets, ETS tables, ports, or other external
+  resources, use the linked resource-owner pattern documented in
+  [docs/recipes.md](./docs/recipes.md) and
+  [docs/safety_and_limits.md](./docs/safety_and_limits.md).
+- **One internal coupling.** We construct `Subject` from a remote PID
+  via [one Erlang FFI function](src/distribute_ffi_utils.erl). That is
+  the single point that depends on `gleam_erlang`'s subject layout.
 
 ## Development
 
 ```sh
-gleam test
-gleam docs build
+gleam test          # full suite (includes mandatory real-cluster Z2/Z3)
+epmd -daemon        # start Erlang distribution daemon if not already running
+gleam dev           # multi-node playground
+gleam docs build    # local API docs
 ```
+
+## License
+
+MIT. See [LICENSE](./LICENSE).
