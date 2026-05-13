@@ -147,8 +147,6 @@ pub fn sized_decoder(
 }
 
 /// Decoder for tagged messages with tag and version validation.
-///
-/// Returns `TagMismatch` or `VersionMismatch` errors for protocol mismatches.
 pub fn decoder(
   expected_tag: String,
   expected_version: Int,

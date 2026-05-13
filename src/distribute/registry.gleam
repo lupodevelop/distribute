@@ -23,9 +23,7 @@ import gleam/int
 // ---------------------------------------------------------------------------
 
 /// A name bound to an encoder/decoder pair.
-///
-/// The `msg` type links registration and lookup: register with
-/// `TypedName(Int)`, look up a `GlobalSubject(Int)`.
+/// The msg type links registration and lookup at compile time.
 pub opaque type TypedName(msg) {
   TypedName(
     name: String,

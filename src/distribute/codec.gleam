@@ -58,7 +58,7 @@ pub type Encoder(a) =
 pub type Decoder(a) =
   fn(BitArray) -> Result(a, DecodeError)
 
-/// Like `Decoder` but returns leftover bytes for chaining.
+/// Like Decoder but returns leftover bytes for chaining.
 pub type SizedDecoder(a) =
   fn(BitArray) -> Result(#(a, BitArray), DecodeError)
 
@@ -588,16 +588,7 @@ pub fn subject() -> Codec(process.Subject(BitArray)) {
   )
 }
 
-/// Transform a codec. `wrap` runs after decoding, `unwrap` before encoding.
-///
-/// ```gleam
-/// type UserId { UserId(Int) }
-///
-/// let user_id = codec.map(codec.int(), UserId, fn(uid) {
-///   let UserId(n) = uid
-///   n
-/// })
-/// ```
+/// Transform a codec. wrap runs after decoding, unwrap before encoding.
 pub fn map(c: Codec(a), wrap: fn(a) -> b, unwrap: fn(b) -> a) -> Codec(b) {
   Codec(
     encoder: fn(value) { c.encoder(unwrap(value)) },

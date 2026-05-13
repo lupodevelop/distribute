@@ -29,7 +29,7 @@ fn create_subject(
 // Type
 // ---------------------------------------------------------------------------
 
-/// A subject with a codec, usable across nodes.
+/// A subject bundled with its codec, usable across nodes.
 pub opaque type GlobalSubject(msg) {
   GlobalSubject(
     subject: process.Subject(BitArray),

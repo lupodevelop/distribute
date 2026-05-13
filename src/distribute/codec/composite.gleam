@@ -10,7 +10,7 @@ import gleam/result
 // Option codecs
 // ============================================================================
 
-/// Encoder for `Option(a)`. None → `<<0>>`, Some(v) → `<<1, encoded_v>>`.
+/// Encoder for Option(a). None is 0x00, Some(v) is 0x01 + encoded value.
 pub fn option_encoder(inner: Encoder(a)) -> Encoder(Option(a)) {
   fn(opt) {
     case opt {
@@ -63,7 +63,7 @@ pub fn option_decoder(inner: Decoder(a)) -> Decoder(Option(a)) {
 // Result codecs
 // ============================================================================
 
-/// Encoder for `Result(a, e)`. Ok → `<<0, encoded>>`, Error → `<<1, encoded>>`.
+/// Encoder for Result(a, e). Ok is 0x00 + encoded, Error is 0x01 + encoded.
 pub fn result_encoder(
   ok_encoder: Encoder(a),
   error_encoder: Encoder(e),
