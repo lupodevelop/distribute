@@ -84,9 +84,14 @@ fn real_peer_global_lookup_roundtrip() -> Nil {
 }
 
 fn check_distributed() -> Bool {
-  case cluster.start_node("distribute_test@127.0.0.1", "testcookie") {
+  let prev = test_helpers.silence_logger()
+  let result = case
+    cluster.start_node("distribute_test@127.0.0.1", "testcookie")
+  {
     Ok(Nil) -> True
     Error(cluster.AlreadyStarted) -> True
     Error(_) -> False
   }
+  test_helpers.restore_logger(prev)
+  result
 }

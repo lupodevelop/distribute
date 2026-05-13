@@ -2,6 +2,8 @@
 ///
 /// Provides a unique ID generator for test isolation so each test
 /// uses a unique name and won't collide with other tests.
+import gleam/dynamic.{type Dynamic}
+
 @external(erlang, "erlang", "unique_integer")
 fn erlang_unique_int() -> Int
 
@@ -16,3 +18,9 @@ pub fn unique_id() -> String {
     False -> n
   })
 }
+
+@external(erlang, "telemetry_test_ffi", "silence_logger")
+pub fn silence_logger() -> Dynamic
+
+@external(erlang, "telemetry_test_ffi", "restore_logger")
+pub fn restore_logger(prev: Dynamic) -> Nil

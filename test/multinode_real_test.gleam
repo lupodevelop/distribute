@@ -71,7 +71,10 @@ fn skip_if_no_distribution(_test_id: String, _reason: String) -> Nil {
 // ---------------------------------------------------------------------------
 
 pub fn z2_global_sync_race_resolves_within_window_test() {
-  case ensure_distribution_ffi() {
+  let prev = test_helpers.silence_logger()
+  let dist = ensure_distribution_ffi()
+  test_helpers.restore_logger(prev)
+  case dist {
     Error(reason) ->
       skip_if_no_distribution("Z2", "distribution unavailable: " <> reason)
     Ok(_origin) -> {
@@ -120,7 +123,10 @@ pub fn z2_global_sync_race_resolves_within_window_test() {
 // ---------------------------------------------------------------------------
 
 pub fn z3_cross_node_register_global_picks_one_winner_test() {
-  case ensure_distribution_ffi() {
+  let prev = test_helpers.silence_logger()
+  let dist = ensure_distribution_ffi()
+  test_helpers.restore_logger(prev)
+  case dist {
     Error(reason) ->
       skip_if_no_distribution("Z3", "distribution unavailable: " <> reason)
     Ok(_origin) -> {
