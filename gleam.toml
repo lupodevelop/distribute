@@ -1,5 +1,5 @@
 name = "distribute"
-version = "3.0.0"
+version = "4.0.0"
 description = "Typed distributed messaging for Gleam on the BEAM."
 licences = ["MIT"]
 repository = { type = "github", user = "lupodevelop", repo = "distribute" }
@@ -8,9 +8,10 @@ links = [
 ]
 
 target = "erlang"
+gleam = ">= 1.16.0"
 
 [dependencies]
-gleam_stdlib = ">= 0.60.0 and < 2.0.0"
+gleam_stdlib = ">= 1.0.0 and < 2.0.0"
 gleam_erlang = ">= 1.0.0 and < 2.0.0"
 gleam_otp = ">= 1.0.0 and < 2.0.0"
 
