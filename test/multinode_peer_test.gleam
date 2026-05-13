@@ -39,8 +39,13 @@ pub fn main() {
 }
 
 pub fn real_peer_global_lookup_roundtrip_test() {
-  ensure_distributed()
+  case check_distributed() {
+    False -> Nil
+    True -> real_peer_global_lookup_roundtrip()
+  }
+}
 
+fn real_peer_global_lookup_roundtrip() -> Nil {
   let name = "peer_roundtrip_" <> test_helpers.unique_id()
   let tn = registry.named(name, codec.int())
   let result_subj = process.new_subject()
@@ -78,10 +83,10 @@ pub fn real_peer_global_lookup_roundtrip_test() {
   should.equal(message, 42)
 }
 
-fn ensure_distributed() -> Nil {
+fn check_distributed() -> Bool {
   case cluster.start_node("distribute_test@127.0.0.1", "testcookie") {
-    Ok(Nil) -> Nil
-    Error(cluster.AlreadyStarted) -> Nil
-    Error(_) -> should.be_true(False)
+    Ok(Nil) -> True
+    Error(cluster.AlreadyStarted) -> True
+    Error(_) -> False
   }
 }

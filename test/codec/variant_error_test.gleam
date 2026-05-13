@@ -25,8 +25,8 @@ pub fn malformed_payload_test() {
     })
     |> variant.build()
 
-  // Tag 0 (A), but invalid string length (declares 100 bytes but is empty)
-  let bits = <<0:8, 100:16>>
+  // Tag 0 (A), declares 100-byte string (32-bit prefix) but provides none
+  let bits = <<0:8, 100:32>>
 
   case c.sized_decoder(bits) {
     Error(codec.InsufficientData(_)) -> Nil
