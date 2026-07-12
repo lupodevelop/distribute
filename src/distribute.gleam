@@ -143,7 +143,7 @@ import gleam/otp/supervision
 /// manifest, so this is a release-time discipline, not a runtime
 /// invariant.
 pub fn version() -> String {
-  "4.0.0"
+  "4.0.1"
 }
 
 pub type Config =

@@ -23,7 +23,7 @@ I/O boundary, so a misbehaving peer cannot OOM your node or hang it.
 gleam add distribute
 ```
 
-Requires Gleam 1.16 or newer, Erlang targetÉ only.
+Requires Gleam 1.16 or newer, Erlang target only.
 
 ## 30-second taste
 

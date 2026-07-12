@@ -8,11 +8,21 @@ import gleam/list
 // Types
 // ---------------------------------------------------------------------------
 
+// Encoder outcome: `NotThisVariant` means "try the next strategy",
+// `Encoded`/`VariantEncodeFailed` are terminal. Distinguishing the two
+// failure shapes is what lets a fallible inner encoder surface a typed
+// `EncodeError` instead of panicking.
+type VariantEncodeOutcome {
+  Encoded(BitArray)
+  NotThisVariant
+  VariantEncodeFailed(codec.EncodeError)
+}
+
 type VariantStrategy(a) {
   VariantStrategy(
     id: Int,
     name: String,
-    encoder: fn(a) -> Result(BitArray, Nil),
+    encoder: fn(a) -> VariantEncodeOutcome,
     decoder: codec.SizedDecoder(a),
   )
 }
@@ -49,11 +59,12 @@ pub fn add(
       name:,
       encoder: fn(value) {
         case unwrap(value) {
-          Ok(payload) -> {
-            let assert Ok(bits) = inner.encoder(payload)
-            Ok(bit_array.append(<<id:8>>, bits))
-          }
-          Error(_) -> Error(Nil)
+          Ok(payload) ->
+            case inner.encoder(payload) {
+              Ok(bits) -> Encoded(bit_array.append(<<id:8>>, bits))
+              Error(e) -> VariantEncodeFailed(e)
+            }
+          Error(_) -> NotThisVariant
         }
       },
       decoder: fn(data) {
@@ -86,8 +97,8 @@ pub fn unit(
       name:,
       encoder: fn(val) {
         case match(val) {
-          True -> Ok(<<id:8>>)
-          False -> Error(Nil)
+          True -> Encoded(<<id:8>>)
+          False -> NotThisVariant
         }
       },
       decoder: fn(data) {
@@ -113,8 +124,9 @@ pub fn build(builder: VariantBuilder(a)) -> Codec(a) {
 
   let encoder = fn(value) {
     case find_encoder(strategies, value) {
-      Ok(bits) -> Ok(bits)
-      Error(_) ->
+      Encoded(bits) -> Ok(bits)
+      VariantEncodeFailed(e) -> Error(e)
+      NotThisVariant ->
         Error(codec.EncodeFailed("No variant matched for encoding ADT value"))
     }
   }
@@ -160,19 +172,24 @@ pub fn build(builder: VariantBuilder(a)) -> Codec(a) {
 fn find_encoder(
   strategies: List(VariantStrategy(a)),
   value: a,
-) -> Result(BitArray, Nil) {
+) -> VariantEncodeOutcome {
   case strategies {
-    [] -> Error(Nil)
+    [] -> NotThisVariant
     [s, ..rest] ->
       case s.encoder(value) {
-        Ok(bits) -> Ok(bits)
-        Error(_) -> find_encoder(rest, value)
+        NotThisVariant -> find_encoder(rest, value)
+        outcome -> outcome
       }
   }
 }
 
 fn validate_strategies(strategies: List(VariantStrategy(a))) -> Nil {
   let ids = list.map(strategies, fn(s) { s.id })
+  case list.all(ids, fn(id) { id >= 0 && id <= 255 }) {
+    True -> Nil
+    False ->
+      panic as "Variant codec: variant id out of range, must be 0-255 (the tag is a single wire byte)"
+  }
   case list.unique(ids) |> list.length == list.length(ids) {
     True -> Nil
     False -> panic as "Variant codec: Duplicate IDs detected in builder"

@@ -45,7 +45,9 @@ start_node(Name, Cookie) ->
                         {error, start_atom_budget_exceeded};
                     {ok, CookieAtom} ->
                         Type = node_type_for(NameAtom),
-                        case net_kernel:start([NameAtom, Type]) of
+                        %% net_kernel:start/2 (OTP 24+); the start/1
+                        %% list form is deprecated and slated for removal.
+                        case net_kernel:start(NameAtom, #{name_domain => Type}) of
                             {ok, _} ->
                                 erlang:set_cookie(node(), CookieAtom),
                                 {ok, nil};

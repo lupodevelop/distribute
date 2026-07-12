@@ -2,6 +2,51 @@
 
 <!-- markdownlint-disable MD024 MD049 MD060 -->
 
+## v4.0.1 (2026-07-12)
+
+Bug fix only. No API changes, no wire-format changes. A 4.0.0 node
+and a 4.0.1 node interoperate. Verified against the exported
+package interface: nothing removed, no signature changed.
+
+### Fixed
+
+- **Variant codec no longer crashes the process on a fallible inner
+  encoder.**
+  `variant.add` wrapped the payload encode in `let assert Ok(bits)`,
+  so any inner encoder that legitimately returned an error
+  (`codec.int` on a 64-bit overflow, `codec.string` / `codec.list`
+  past their length prefix) killed the encoding process instead of
+  surfacing `Error`. With attacker-influenced payloads this was a
+  remote-triggerable crash. The internal encoder now threads a
+  three-state outcome (`Encoded`, `NotThisVariant`,
+  `VariantEncodeFailed`) so a real encode failure returns the typed
+  `EncodeError` and only a genuine "wrong variant" falls through to
+  the next strategy.
+- **Variant ids are validated to `0..255` at `build` time.**
+  The tag is a single wire byte (`<<id:8>>`), so an id of 256
+  silently truncated to 0, colliding with another variant and
+  producing a value that encodes one tag but can never decode.
+  `build` now panics with a clear message on any out-of-range id,
+  the same way it already panics on duplicate ids.
+
+### Changed
+
+- **`net_kernel:start/1` list form replaced with `start/2`.**
+  `cluster_ffi:start_node/2` used the deprecated
+  `net_kernel:start([Name, Type])` list form, deprecated since
+  OTP 25 and slated for removal. Switched to
+  `net_kernel:start(Name, #{name_domain => Type})`. Same return
+  shapes, so the typed `StartError` mapping is unchanged. The
+  real-cluster test harness was aligned to the same form.
+- **Internal `tagged` decoder dedup.** `tagged.decoder` and
+  `tagged.sized_decoder` shared roughly 100 lines of copied
+  tag/version header parsing. Extracted a single private
+  `parse_header`. Behaviour and wire format identical.
+- **Doc corrections.** The `conflict_ffi` header claimed a 5 000 ms
+  default resolver deadline referencing a macro that does not
+  exist; the real default is 1 000 ms read from config. Fixed a
+  mojibake in the README install note (`targetÉ`).
+
 ## v4.0.0 (2026-05-13)
 
 First production-grade release. v4 hardens the v3 model: the wire
