@@ -59,6 +59,22 @@ Opt-in second backend: `syn`. Attualmente `:global` strozza i cluster superiori 
   backend; migration notes covering cold-flip semantics; no
   live `:global` → `syn` migration tooling in this release.
 
+## v5 candidates (breaking, possible — not committed)
+
+Deferred from the v4 audit because each breaks the public API.
+
+- Drop the open `Encoder`/`Decoder`/`SizedDecoder` aliases from the
+  public codec surface; `Codec(a)` becomes the only entry point.
+- Move `max_decoded_list_elements` from runtime config into the wire
+  protocol: a runtime-mutable bound lets nodes with different
+  configs reject each other's frames.
+- Prune single-use config knobs to constants
+  (`isolated_proxy_shutdown_grace_ms`, `resource_owner_poll_ms`,
+  `health_proxy_shutdown_grace_ms`, `conflict_resolver_timeout_ms`).
+- Remove the deprecated `cluster.is_healthy` alias.
+- Align `receiver.start_receiver_observed` with its distributed
+  sibling (explicit `init_timeout_ms` parameter).
+
 ## Beyond v4.2
 
 Open. Theorical. Possible directions: Raft-backed registry (`khepri` /

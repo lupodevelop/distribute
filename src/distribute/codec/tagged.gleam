@@ -98,107 +98,78 @@ pub fn sized_decoder(
   payload_sized_decoder: codec.SizedDecoder(payload),
 ) -> codec.SizedDecoder(TaggedMessage(payload)) {
   fn(binary: BitArray) {
-    case binary {
-      <<tag_len:32, rest:bits>> -> {
-        let rest_bytes = bit_array.byte_size(rest)
-        use tag_bytes <- result.try(
-          bit_array.slice(rest, 0, tag_len)
-          |> result.replace_error(codec.InsufficientData("tag truncated")),
-        )
-        use tag_string <- result.try(
-          bit_array.to_string(tag_bytes)
-          |> result.replace_error(codec.InvalidBinary("tag not valid UTF-8")),
-        )
-        case tag_string == expected_tag {
-          False ->
-            Error(codec.TagMismatch(expected: expected_tag, got: tag_string))
-          True -> {
-            use after_tag <- result.try(
-              bit_array.slice(rest, tag_len, rest_bytes - tag_len)
-              |> result.replace_error(codec.InsufficientData("missing version")),
-            )
-            case after_tag {
-              <<ver:32, payload_rest:bits>> -> {
-                case ver == expected_version {
-                  False ->
-                    Error(codec.VersionMismatch(
-                      expected: expected_version,
-                      got: ver,
-                    ))
-                  True -> {
-                    use #(payload, remaining) <- result.try(
-                      payload_sized_decoder(payload_rest),
-                    )
-                    Ok(#(
-                      TaggedMessage(tag: tag_string, version: ver, payload:),
-                      remaining,
-                    ))
-                  }
-                }
-              }
-              _ -> Error(codec.InsufficientData("missing version or payload"))
-            }
-          }
-        }
-      }
-      _ -> Error(codec.InvalidBinary("missing tag length"))
-    }
+    use #(tag_string, ver, payload_rest) <- result.try(parse_header(
+      binary,
+      expected_tag,
+      expected_version,
+    ))
+    use #(payload, remaining) <- result.try(payload_sized_decoder(payload_rest))
+    Ok(#(TaggedMessage(tag: tag_string, version: ver, payload:), remaining))
   }
 }
 
 /// Decoder for tagged messages with tag and version validation.
+///
+/// Unlike `sized_decoder`, the payload decoder receives every byte after
+/// the header and is responsible for its own trailing-byte policy.
 pub fn decoder(
   expected_tag: String,
   expected_version: Int,
   payload_decoder: codec.Decoder(payload),
 ) -> codec.Decoder(TaggedMessage(payload)) {
   fn(binary: BitArray) {
-    case binary {
-      <<tag_len:32, rest:bits>> -> {
-        use tag_bytes <- result.try(
-          bit_array.slice(rest, 0, tag_len)
-          |> result.replace_error(codec.InsufficientData("tag truncated")),
-        )
-        use tag_string <- result.try(
-          bit_array.to_string(tag_bytes)
-          |> result.replace_error(codec.InvalidBinary("tag not valid UTF-8")),
-        )
-        case tag_string == expected_tag {
-          False ->
-            Error(codec.TagMismatch(expected: expected_tag, got: tag_string))
-          True -> {
-            use remaining <- result.try(
-              bit_array.slice(
-                rest,
-                tag_len,
-                bit_array.byte_size(rest) - tag_len,
-              )
-              |> result.replace_error(codec.InsufficientData("missing version")),
-            )
-            case remaining {
-              <<ver:32, payload_bytes:bits>> -> {
-                case ver == expected_version {
-                  False ->
-                    Error(codec.VersionMismatch(
-                      expected: expected_version,
-                      got: ver,
-                    ))
-                  True -> {
-                    use payload <- result.try(codec.decode(
-                      payload_decoder,
-                      payload_bytes,
-                    ))
-                    Ok(TaggedMessage(tag: tag_string, version: ver, payload:))
-                  }
-                }
+    use #(tag_string, ver, payload_rest) <- result.try(parse_header(
+      binary,
+      expected_tag,
+      expected_version,
+    ))
+    use payload <- result.try(codec.decode(payload_decoder, payload_rest))
+    Ok(TaggedMessage(tag: tag_string, version: ver, payload:))
+  }
+}
+
+/// Parse and validate the `[tag_len:32][tag][version:32]` header shared by
+/// `decoder` and `sized_decoder`. Returns the verified tag, version, and
+/// the payload bytes that follow the header.
+fn parse_header(
+  binary: BitArray,
+  expected_tag: String,
+  expected_version: Int,
+) -> Result(#(String, Int, BitArray), codec.DecodeError) {
+  case binary {
+    <<tag_len:32, rest:bits>> -> {
+      use tag_bytes <- result.try(
+        bit_array.slice(rest, 0, tag_len)
+        |> result.replace_error(codec.InsufficientData("tag truncated")),
+      )
+      use tag_string <- result.try(
+        bit_array.to_string(tag_bytes)
+        |> result.replace_error(codec.InvalidBinary("tag not valid UTF-8")),
+      )
+      case tag_string == expected_tag {
+        False ->
+          Error(codec.TagMismatch(expected: expected_tag, got: tag_string))
+        True -> {
+          use after_tag <- result.try(
+            bit_array.slice(rest, tag_len, bit_array.byte_size(rest) - tag_len)
+            |> result.replace_error(codec.InsufficientData("missing version")),
+          )
+          case after_tag {
+            <<ver:32, payload_rest:bits>> ->
+              case ver == expected_version {
+                False ->
+                  Error(codec.VersionMismatch(
+                    expected: expected_version,
+                    got: ver,
+                  ))
+                True -> Ok(#(tag_string, ver, payload_rest))
               }
-              _ -> Error(codec.InsufficientData("missing version or payload"))
-            }
+            _ -> Error(codec.InsufficientData("missing version or payload"))
           }
         }
       }
-      _ -> Error(codec.InvalidBinary("missing tag length"))
     }
+    _ -> Error(codec.InvalidBinary("missing tag length"))
   }
 }
 

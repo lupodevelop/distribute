@@ -27,7 +27,7 @@ ensure_distribution() ->
             Name = list_to_atom(
                 "distribute_test_" ++ integer_to_list(erlang:unique_integer([positive]))
                 ++ "@127.0.0.1"),
-            case net_kernel:start([Name, longnames]) of
+            case net_kernel:start(Name, #{name_domain => longnames}) of
                 {ok, _} ->
                     erlang:set_cookie(node(), 'distribute-test-cookie'),
                     {ok, atom_to_binary(node(), utf8)};

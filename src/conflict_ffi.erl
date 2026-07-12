@@ -14,8 +14,9 @@
 %%
 %% 1. The user fn runs in a short-lived spawned worker, not in
 %%    global_name_server.
-%% 2. We wait for the worker's reply with a hard deadline (default
-%%    5000 ms, see DEFAULT_RESOLVER_TIMEOUT_MS).
+%% 2. We wait for the worker's reply with a hard deadline read from
+%%    the runtime config (`config_ffi:get_conflict_resolver_timeout/0`,
+%%    default 1000 ms).
 %% 3. If the worker crashes or the deadline expires, we apply a
 %%    deterministic fallback (lowest term-ordered Pid wins) so
 %%    `:global` always gets a Pid back and the cluster does not
