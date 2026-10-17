@@ -2,6 +2,17 @@
 
 <!-- markdownlint-disable MD024 MD049 MD060 -->
 
+## Unreleased
+
+### Fixed
+
+- Keep the distribution atom-budget counter alive for the entire VM lifetime.
+  The previous ETS table disappeared when its first caller exited, resetting
+  the budget and potentially crashing concurrent readers. The atomics reference
+  is now published once in `persistent_term` under a node-local initialisation
+  lock; subsequent reads and reservations remain lock-free. Public APIs and
+  wire formats are unchanged.
+
 ## v4.0.1 (2026-07-12)
 
 Bug fix only. No API changes, no wire-format changes. A 4.0.0 node

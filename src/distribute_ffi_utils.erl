@@ -25,50 +25,32 @@
 %% ----------------------------------------------------------------------------
 
 -define(BUDGET_VALUE_KEY, distribute_atom_budget).
--define(BUDGET_COUNTER_TABLE, distribute_atom_counter_table).
+-define(BUDGET_COUNTER_KEY, {?MODULE, atom_budget_counter}).
 -define(DEFAULT_BUDGET, 10_000).
 
-%% Lazy-init the atomics counter, race-safe and **without**
-%% `persistent_term:put` was the previous design and rewrote the term once
-%% per concurrent first-caller, and every overwrite of a `persistent_term`
-%% slot triggers a global GC pass across every process in the VM.
-%% Under a `cluster.health` fan-out (50 parallel pings, all hitting
-%% `ensure_counter` at once on a cold VM) that produced 50 back-to-back
-%% global GCs and froze the runtime for seconds.
+%% The atomics reference must live for the entire VM lifetime. An ETS
+%% table owned by the first caller disappears when that caller exits,
+%% silently resetting the budget (or crashing concurrent readers).
 %%
-%% ETS is the right tool here:
-%% - `ets:new(named_table, public, ...)` is atomic; concurrent racers
-%%   either win or get `badarg` (which we catch).
-%% - `ets:insert_new/2` is atomic check-and-insert; the first caller
-%%   plants the atomics ref, every other caller reads the canonical
-%%   ref via `ets:lookup/2`. No global GC, no rewrite.
-%% - Reads after init cost a single hash lookup (with `read_concurrency`
-%%   the BEAM serves them lock-free across schedulers).
+%% Publish the reference once in persistent_term. Only cold callers take
+%% the node-local lock, then recheck the slot so concurrent initialisers
+%% cannot overwrite a live counter. Inserting a NEW persistent term does
+%% not trigger the global GC associated with replacing a complex term.
+%% Hot reads and counter increments remain lock-free. The reference is
+%% never erased, including by the test-only reset: only its value changes.
 ensure_counter() ->
-    Table = ?BUDGET_COUNTER_TABLE,
-    case ets:whereis(Table) of
+    case persistent_term:get(?BUDGET_COUNTER_KEY, undefined) of
         undefined ->
-            try
-                ets:new(Table, [
-                    named_table, public, set, {read_concurrency, true}
-                ])
-            catch
-                error:badarg -> Table
-            end;
-        _ ->
-            Table
-    end,
-    case ets:lookup(Table, ref) of
-        [{ref, Ref}] ->
-            Ref;
-        [] ->
-            MyRef = atomics:new(1, [{signed, false}]),
-            case ets:insert_new(Table, {ref, MyRef}) of
-                true -> MyRef;
-                false ->
-                    [{ref, Ref}] = ets:lookup(Table, ref),
-                    Ref
-            end
+            global:trans({?BUDGET_COUNTER_KEY, self()}, fun() ->
+                case persistent_term:get(?BUDGET_COUNTER_KEY, undefined) of
+                    undefined ->
+                        Ref = atomics:new(1, [{signed, false}]),
+                        persistent_term:put(?BUDGET_COUNTER_KEY, Ref),
+                        Ref;
+                    Ref -> Ref
+                end
+            end, [node()]);
+        Ref -> Ref
     end.
 
 current_budget() ->

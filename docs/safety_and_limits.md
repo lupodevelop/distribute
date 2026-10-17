@@ -132,6 +132,16 @@ budget only changes the cap, not the running count), and is implemented
 with `atomics:add_get/3` so it is correct under concurrent access from
 multiple schedulers.
 
+The counter reference is published once in `persistent_term` under a
+node-local initialisation lock and survives the death of every caller.
+
+Reservations are conservative: killing a caller **after a successful
+reservation** can leave that slot consumed even if the atom was not yet
+created. Concurrent callers racing to create the same name can also reserve
+more than one slot. This can cause an early refusal, but cannot permit
+creation beyond the budget. Already-existing atoms remain usable without
+reserving another slot.
+
 ## Threat Model
 
 Where the typed boundary holds, and where it does not.
