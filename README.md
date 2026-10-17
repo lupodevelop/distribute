@@ -156,7 +156,7 @@ fail the test in every mode.
 
 CI covers Gleam 1.16.0 / OTP 27.0 and Gleam 1.19.2 / OTP 29.1.2.
 Formatting and documentation checks run on the newer toolchain. Action
-revisions are pinned, with weekly update PRs managed by Dependabot.
+revisions are pinned and updated manually.
 
 ## License
 
