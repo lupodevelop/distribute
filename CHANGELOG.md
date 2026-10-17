@@ -12,6 +12,10 @@
   is now published once in `persistent_term` under a node-local initialisation
   lock; subsequent reads and reservations remain lock-free. Public APIs and
   wire formats are unchanged.
+- Reserve atom-budget slots with compare-and-swap instead of a speculative
+  increment followed by rollback. Killing a caller denied by an exhausted
+  budget no longer leaves the counter inflated or prevents later use of
+  newly granted capacity.
 
 ## v4.0.1 (2026-07-12)
 

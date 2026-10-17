@@ -1,10 +1,12 @@
 -module(atom_budget_test_ffi).
 -export([normal_exit/0, killed_caller/0, concurrent_first_callers/0,
+         killed_denied_callers/0,
          run_scenario/1]).
 
 normal_exit() -> fresh_vm(normal_exit).
 killed_caller() -> fresh_vm(killed_caller).
 concurrent_first_callers() -> fresh_vm(concurrent_first_callers).
+killed_denied_callers() -> fresh_vm(killed_denied_callers).
 
 %% Exercise cold initialisation without erasing VM-global state in the
 %% test runner. No distribution or epmd is required. A subprocess also
@@ -82,7 +84,40 @@ run_scenario(concurrent_first_callers) ->
     56 = length([ok || {error, atom_budget_exceeded} <- Results]),
     {error, atom_budget_exceeded} =
         distribute_ffi_utils:to_node_atom_safe(<<"budget_after_racers@localhost">>),
+    ok;
+run_scenario(killed_denied_callers) ->
+    %% Repeated cancellation while already at the cap must not consume
+    %% capacity. In particular, a denied caller killed between a speculative
+    %% increment and its rollback must not leave the budget inflated.
+    [denied_caller_churn(I) || I <- lists:seq(1, 10)],
     ok.
+
+denied_caller_churn(I) ->
+    distribute_ffi_utils:atom_budget_reset(),
+    config_ffi:put_atom_budget(1),
+    Prefix = <<"budget_churn_", (integer_to_binary(I))/binary>>,
+    {ok, _} = distribute_ffi_utils:to_cookie_atom_safe(Prefix),
+    Parent = self(),
+    Workers = [spawn_monitor(fun() ->
+        Parent ! {self(), ready},
+        denied_loop()
+    end) || _ <- lists:seq(1, 256)],
+    [receive {Pid, ready} -> ok after 5000 -> error(worker_not_ready) end
+     || {Pid, _} <- Workers],
+    %% Let the two schedulers exercise the saturated path before cancellation.
+    receive after 10 -> ok end,
+    [exit(Pid, kill) || {Pid, _} <- Workers],
+    [await_down(Pid, Mon) || {Pid, Mon} <- Workers],
+    config_ffi:put_atom_budget(2),
+    {ok, _} = distribute_ffi_utils:to_cookie_atom_safe(<<Prefix/binary, "_next">>),
+    {error, atom_budget_exceeded} =
+        distribute_ffi_utils:to_cookie_atom_safe(<<Prefix/binary, "_refused">>),
+    ok.
+
+denied_loop() ->
+    {error, atom_budget_exceeded} =
+        distribute_ffi_utils:to_cookie_atom_safe(<<"budget_churn_never_created">>),
+    denied_loop().
 
 await_down(Pid, Mon) ->
     receive

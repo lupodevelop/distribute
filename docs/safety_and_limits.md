@@ -129,9 +129,9 @@ distribute.configure(config.Config(
 
 The counter is per-VM, persists across `configure` calls (changing the
 budget only changes the cap, not the running count), and is implemented
-with `atomics:add_get/3` so it is correct under concurrent access from
-multiple schedulers.
-
+with `atomics:compare_exchange/4` so reservations never increment past the
+cap under concurrent access from multiple schedulers. Calls refused by the
+budget do not mutate the counter, including when the caller is killed.
 The counter reference is published once in `persistent_term` under a
 node-local initialisation lock and survives the death of every caller.
 

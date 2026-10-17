@@ -21,7 +21,8 @@
 %% so the check is lock-free and concurrency-safe.
 %%
 %% Existing atoms (already in the table) are always allowed. They cost
-%% nothing extra. Only the first creation of a name burns one budget unit.
+%% nothing extra. Reservations are conservative: a caller killed after
+%% reserving a slot can leave it consumed even if no atom was created.
 %% ----------------------------------------------------------------------------
 
 -define(BUDGET_VALUE_KEY, distribute_atom_budget).
@@ -56,18 +57,23 @@ ensure_counter() ->
 current_budget() ->
     persistent_term:get(?BUDGET_VALUE_KEY, ?DEFAULT_BUDGET).
 
-%% Atomically reserve one budget unit. Returns `{ok, Ref}` if the reservation
-%% succeeded (caller may create the atom); `{error, atom_budget_exceeded}` if
-%% the budget is full (and decrements its speculative add to keep the counter
-%% accurate).
+%% Reserve without ever incrementing past the cap. A speculative add followed
+%% by rollback leaves the counter inflated if a denied caller is killed
+%% between those operations. CAS makes rejection read-only, so cancellation
+%% of a denied caller cannot consume capacity. Only successful reservations
+%% mutate the counter; contention retries with the value observed by CAS.
 try_reserve_atom() ->
     Ref = ensure_counter(),
-    New = atomics:add_get(Ref, 1, 1),
-    case New =< current_budget() of
-        true -> {ok, Ref};
+    reserve_atom(Ref, atomics:get(Ref, 1)).
+
+reserve_atom(Ref, Used) ->
+    case Used >= current_budget() of
+        true -> {error, atom_budget_exceeded};
         false ->
-            atomics:sub(Ref, 1, 1),
-            {error, atom_budget_exceeded}
+            case atomics:compare_exchange(Ref, 1, Used, Used + 1) of
+                ok -> {ok, Ref};
+                Actual -> reserve_atom(Ref, Actual)
+            end
     end.
 
 %% Public: reset the counter. `@internal` on the Gleam side means only
