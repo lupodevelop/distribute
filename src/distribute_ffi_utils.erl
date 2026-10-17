@@ -21,71 +21,59 @@
 %% so the check is lock-free and concurrency-safe.
 %%
 %% Existing atoms (already in the table) are always allowed. They cost
-%% nothing extra. Only the first creation of a name burns one budget unit.
+%% nothing extra. Reservations are conservative: a caller killed after
+%% reserving a slot can leave it consumed even if no atom was created.
 %% ----------------------------------------------------------------------------
 
 -define(BUDGET_VALUE_KEY, distribute_atom_budget).
--define(BUDGET_COUNTER_TABLE, distribute_atom_counter_table).
+-define(BUDGET_COUNTER_KEY, {?MODULE, atom_budget_counter}).
 -define(DEFAULT_BUDGET, 10_000).
 
-%% Lazy-init the atomics counter, race-safe and **without**
-%% `persistent_term:put` was the previous design and rewrote the term once
-%% per concurrent first-caller, and every overwrite of a `persistent_term`
-%% slot triggers a global GC pass across every process in the VM.
-%% Under a `cluster.health` fan-out (50 parallel pings, all hitting
-%% `ensure_counter` at once on a cold VM) that produced 50 back-to-back
-%% global GCs and froze the runtime for seconds.
+%% The atomics reference must live for the entire VM lifetime. An ETS
+%% table owned by the first caller disappears when that caller exits,
+%% silently resetting the budget (or crashing concurrent readers).
 %%
-%% ETS is the right tool here:
-%% - `ets:new(named_table, public, ...)` is atomic; concurrent racers
-%%   either win or get `badarg` (which we catch).
-%% - `ets:insert_new/2` is atomic check-and-insert; the first caller
-%%   plants the atomics ref, every other caller reads the canonical
-%%   ref via `ets:lookup/2`. No global GC, no rewrite.
-%% - Reads after init cost a single hash lookup (with `read_concurrency`
-%%   the BEAM serves them lock-free across schedulers).
+%% Publish the reference once in persistent_term. Only cold callers take
+%% the node-local lock, then recheck the slot so concurrent initialisers
+%% cannot overwrite a live counter. Inserting a NEW persistent term does
+%% not trigger the global GC associated with replacing a complex term.
+%% Hot reads and counter increments remain lock-free. The reference is
+%% never erased, including by the test-only reset: only its value changes.
 ensure_counter() ->
-    Table = ?BUDGET_COUNTER_TABLE,
-    case ets:whereis(Table) of
+    case persistent_term:get(?BUDGET_COUNTER_KEY, undefined) of
         undefined ->
-            try
-                ets:new(Table, [
-                    named_table, public, set, {read_concurrency, true}
-                ])
-            catch
-                error:badarg -> Table
-            end;
-        _ ->
-            Table
-    end,
-    case ets:lookup(Table, ref) of
-        [{ref, Ref}] ->
-            Ref;
-        [] ->
-            MyRef = atomics:new(1, [{signed, false}]),
-            case ets:insert_new(Table, {ref, MyRef}) of
-                true -> MyRef;
-                false ->
-                    [{ref, Ref}] = ets:lookup(Table, ref),
-                    Ref
-            end
+            global:trans({?BUDGET_COUNTER_KEY, self()}, fun() ->
+                case persistent_term:get(?BUDGET_COUNTER_KEY, undefined) of
+                    undefined ->
+                        Ref = atomics:new(1, [{signed, false}]),
+                        persistent_term:put(?BUDGET_COUNTER_KEY, Ref),
+                        Ref;
+                    Ref -> Ref
+                end
+            end, [node()]);
+        Ref -> Ref
     end.
 
 current_budget() ->
     persistent_term:get(?BUDGET_VALUE_KEY, ?DEFAULT_BUDGET).
 
-%% Atomically reserve one budget unit. Returns `{ok, Ref}` if the reservation
-%% succeeded (caller may create the atom); `{error, atom_budget_exceeded}` if
-%% the budget is full (and decrements its speculative add to keep the counter
-%% accurate).
+%% Reserve without ever incrementing past the cap. A speculative add followed
+%% by rollback leaves the counter inflated if a denied caller is killed
+%% between those operations. CAS makes rejection read-only, so cancellation
+%% of a denied caller cannot consume capacity. Only successful reservations
+%% mutate the counter; contention retries with the value observed by CAS.
 try_reserve_atom() ->
     Ref = ensure_counter(),
-    New = atomics:add_get(Ref, 1, 1),
-    case New =< current_budget() of
-        true -> {ok, Ref};
+    reserve_atom(Ref, atomics:get(Ref, 1)).
+
+reserve_atom(Ref, Used) ->
+    case Used >= current_budget() of
+        true -> {error, atom_budget_exceeded};
         false ->
-            atomics:sub(Ref, 1, 1),
-            {error, atom_budget_exceeded}
+            case atomics:compare_exchange(Ref, 1, Used, Used + 1) of
+                ok -> {ok, Ref};
+                Actual -> reserve_atom(Ref, Actual)
+            end
     end.
 
 %% Public: reset the counter. `@internal` on the Gleam side means only
@@ -115,14 +103,35 @@ budget_aware_atom_create(Bin) ->
     catch error:badarg ->
         case try_reserve_atom() of
             {error, atom_budget_exceeded} ->
-                {error, atom_budget_exceeded};
+                %% Another caller may have created Bin after our first
+                %% lookup (including while we waited for cold init).
+                existing_atom_or_refuse(Bin);
             {ok, Ref} ->
-                try
-                    {ok, binary_to_atom(Bin, utf8)}
-                catch error:system_limit ->
-                    atomics:sub(Ref, 1, 1),
-                    {error, atom_budget_exceeded}
-                end
+                create_reserved_atom(Bin, Ref)
+        end
+    end.
+
+existing_atom_or_refuse(Bin) ->
+    try
+        {ok, binary_to_existing_atom(Bin, utf8)}
+    catch error:badarg ->
+        {error, atom_budget_exceeded}
+    end.
+
+create_reserved_atom(Bin, Ref) ->
+    %% Recheck after reservation: a concurrent creator may have won while
+    %% we waited. Reusing its atom does not need our reserved capacity.
+    %% Only refund when this lookup proves we did not create an atom.
+    try binary_to_existing_atom(Bin, utf8) of
+        Atom ->
+            atomics:sub(Ref, 1, 1),
+            {ok, Atom}
+    catch error:badarg ->
+        try
+            {ok, binary_to_atom(Bin, utf8)}
+        catch error:system_limit ->
+            atomics:sub(Ref, 1, 1),
+            {error, atom_budget_exceeded}
         end
     end.
 

@@ -11,10 +11,6 @@ pub fn main() {
   gleeunit.main()
 }
 
-pub fn version_test() {
-  should.equal(distribute.version(), "4.0.0")
-}
-
 /// Regression: `distribute.version()` is hardcoded in
 /// `src/distribute.gleam` (Gleam has no compile-time API to read
 /// `gleam.toml`). A release that bumps the manifest without bumping

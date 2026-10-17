@@ -1,0 +1,45 @@
+import gleeunit/should
+
+// Each scenario starts a fresh VM: config.reset() would initialise the
+// counter in the test process and hide the first-caller lifetime bug.
+@external(erlang, "atom_budget_test_ffi", "normal_exit")
+fn normal_exit() -> Result(Nil, String)
+
+@external(erlang, "atom_budget_test_ffi", "killed_caller")
+fn killed_caller() -> Result(Nil, String)
+
+@external(erlang, "atom_budget_test_ffi", "concurrent_first_callers")
+fn concurrent_first_callers() -> Result(Nil, String)
+
+@external(erlang, "atom_budget_test_ffi", "killed_denied_callers")
+fn killed_denied_callers() -> Result(Nil, String)
+
+@external(erlang, "atom_budget_test_ffi", "shared_name_at_cap")
+fn shared_name_at_cap() -> Result(Nil, String)
+
+@external(erlang, "atom_budget_test_ffi", "shared_name_spare_capacity")
+fn shared_name_spare_capacity() -> Result(Nil, String)
+
+pub fn atom_budget_survives_first_caller_normal_exit_test() {
+  normal_exit() |> should.equal(Ok(Nil))
+}
+
+pub fn atom_budget_survives_first_caller_kill_test() {
+  killed_caller() |> should.equal(Ok(Nil))
+}
+
+pub fn atom_budget_is_shared_by_concurrent_first_callers_test() {
+  concurrent_first_callers() |> should.equal(Ok(Nil))
+}
+
+pub fn killed_denied_callers_do_not_consume_atom_budget_test() {
+  killed_denied_callers() |> should.equal(Ok(Nil))
+}
+
+pub fn concurrent_existing_name_is_accepted_at_atom_budget_cap_test() {
+  shared_name_at_cap() |> should.equal(Ok(Nil))
+}
+
+pub fn concurrent_existing_name_does_not_consume_another_slot_test() {
+  shared_name_spare_capacity() |> should.equal(Ok(Nil))
+}
