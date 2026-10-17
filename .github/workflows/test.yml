@@ -22,5 +22,7 @@ jobs:
       - run: gleam deps download
       - run: epmd -daemon
       - run: gleam test
+        env:
+          DISTRIBUTE_REQUIRE_MULTINODE: "1"
       - run: gleam format --check src test
       - run: gleam docs build
