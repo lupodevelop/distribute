@@ -20,6 +20,15 @@
   reuse a concurrently created atom even at the budget cap, and refund a
   reservation when the atom is found before their own creation attempt.
 
+### Tests
+
+- Fail missing multinode prerequisites in CI and strict local runs, and print
+  explicit skip reasons in other local runs. Start Z3 registrations behind a
+  peer-side readiness barrier, check setup and registration results, and clean
+  up peers even when assertions fail.
+- Cover minimum and current toolchains in CI, update and pin the action
+  revisions, and remove the unused Node.js setup step.
+
 ## v4.0.1 (2026-07-12)
 
 Bug fix only. No API changes, no wire-format changes. A 4.0.0 node
