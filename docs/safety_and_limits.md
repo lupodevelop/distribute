@@ -137,10 +137,13 @@ node-local initialisation lock and survives the death of every caller.
 
 Reservations are conservative: killing a caller **after a successful
 reservation** can leave that slot consumed even if the atom was not yet
-created. Concurrent callers racing to create the same name can also reserve
-more than one slot. This can cause an early refusal, but cannot permit
-creation beyond the budget. Already-existing atoms remain usable without
-reserving another slot.
+created. The helper rechecks the atom table before refusing a reservation
+and after accepting one: a concurrently created atom is reused, and a
+reservation proven unnecessary is refunded. A narrower race between the
+last recheck and creation can still consume more than one slot for the
+same name. This can cause an early refusal, but cannot permit creation
+beyond the budget. Already-existing atoms remain usable without reserving
+another slot.
 
 ## Threat Model
 

@@ -16,6 +16,9 @@
   increment followed by rollback. Killing a caller denied by an exhausted
   budget no longer leaves the counter inflated or prevents later use of
   newly granted capacity.
+- Recheck whether an atom already exists after a stale lookup. Callers now
+  reuse a concurrently created atom even at the budget cap, and refund a
+  reservation when the atom is found before their own creation attempt.
 
 ## v4.0.1 (2026-07-12)
 

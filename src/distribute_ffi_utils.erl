@@ -103,14 +103,35 @@ budget_aware_atom_create(Bin) ->
     catch error:badarg ->
         case try_reserve_atom() of
             {error, atom_budget_exceeded} ->
-                {error, atom_budget_exceeded};
+                %% Another caller may have created Bin after our first
+                %% lookup (including while we waited for cold init).
+                existing_atom_or_refuse(Bin);
             {ok, Ref} ->
-                try
-                    {ok, binary_to_atom(Bin, utf8)}
-                catch error:system_limit ->
-                    atomics:sub(Ref, 1, 1),
-                    {error, atom_budget_exceeded}
-                end
+                create_reserved_atom(Bin, Ref)
+        end
+    end.
+
+existing_atom_or_refuse(Bin) ->
+    try
+        {ok, binary_to_existing_atom(Bin, utf8)}
+    catch error:badarg ->
+        {error, atom_budget_exceeded}
+    end.
+
+create_reserved_atom(Bin, Ref) ->
+    %% Recheck after reservation: a concurrent creator may have won while
+    %% we waited. Reusing its atom does not need our reserved capacity.
+    %% Only refund when this lookup proves we did not create an atom.
+    try binary_to_existing_atom(Bin, utf8) of
+        Atom ->
+            atomics:sub(Ref, 1, 1),
+            {ok, Atom}
+    catch error:badarg ->
+        try
+            {ok, binary_to_atom(Bin, utf8)}
+        catch error:system_limit ->
+            atomics:sub(Ref, 1, 1),
+            {error, atom_budget_exceeded}
         end
     end.
 

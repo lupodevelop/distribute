@@ -1,12 +1,15 @@
 -module(atom_budget_test_ffi).
 -export([normal_exit/0, killed_caller/0, concurrent_first_callers/0,
          killed_denied_callers/0,
+         shared_name_at_cap/0, shared_name_spare_capacity/0,
          run_scenario/1]).
 
 normal_exit() -> fresh_vm(normal_exit).
 killed_caller() -> fresh_vm(killed_caller).
 concurrent_first_callers() -> fresh_vm(concurrent_first_callers).
 killed_denied_callers() -> fresh_vm(killed_denied_callers).
+shared_name_at_cap() -> fresh_vm(shared_name_at_cap).
+shared_name_spare_capacity() -> fresh_vm(shared_name_spare_capacity).
 
 %% Exercise cold initialisation without erasing VM-global state in the
 %% test runner. No distribution or epmd is required. A subprocess also
@@ -90,6 +93,56 @@ run_scenario(killed_denied_callers) ->
     %% capacity. In particular, a denied caller killed between a speculative
     %% increment and its rollback must not leave the budget inflated.
     [denied_caller_churn(I) || I <- lists:seq(1, 10)],
+    ok;
+run_scenario(shared_name_at_cap) ->
+    shared_name_race(1);
+run_scenario(shared_name_spare_capacity) ->
+    shared_name_race(2).
+
+%% Force a stale atom-table miss without sleeps or production test hooks.
+%% Hold the cold-init lock and trace entry into ensure_counter: the caller
+%% has already found that Name does not exist and cannot reserve yet.
+%% Pause it there, let another caller create Name, then resume it.
+shared_name_race(Budget) ->
+    config_ffi:put_atom_budget(Budget),
+    {module, distribute_ffi_utils} = code:ensure_loaded(distribute_ffi_utils),
+    Lock = {{distribute_ffi_utils, atom_budget_counter}, self()},
+    true = global:set_lock(Lock, [node()]),
+    Parent = self(),
+    Name = <<"budget_shared_cookie">>,
+    {Pid, Mon} = spawn_monitor(fun() ->
+        receive go -> ok end,
+        Parent ! {self(), distribute_ffi_utils:to_cookie_atom_safe(Name)}
+    end),
+    erlang:trace_pattern({distribute_ffi_utils, ensure_counter, 0}, true, [local]),
+    erlang:trace(Pid, true, [call]),
+    Pid ! go,
+    receive
+        {trace, Pid, call, {distribute_ffi_utils, ensure_counter, []}} -> ok
+    after 5000 -> error(caller_did_not_initialise)
+    end,
+    true = erlang:suspend_process(Pid),
+    global:del_lock(Lock, [node()]),
+    try
+        {ok, _} = distribute_ffi_utils:to_cookie_atom_safe(Name)
+    after
+        erlang:trace(Pid, false, [call]),
+        erlang:trace_pattern({distribute_ffi_utils, ensure_counter, 0}, false, [local]),
+        erlang:resume_process(Pid)
+    end,
+    receive
+        {Pid, {ok, _}} -> ok;
+        {Pid, Other} -> error({shared_name_refused, Other})
+    after 5000 -> error(shared_name_caller_stalled)
+    end,
+    await_down(Pid, Mon),
+    case Budget of
+        2 ->
+            {ok, _} = distribute_ffi_utils:to_node_atom_safe(<<"budget_other@localhost">>);
+        1 -> ok
+    end,
+    {error, atom_budget_exceeded} =
+        distribute_ffi_utils:to_cookie_atom_safe(<<"budget_shared_refused">>),
     ok.
 
 denied_caller_churn(I) ->
