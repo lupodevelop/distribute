@@ -154,6 +154,10 @@ test and reason on stderr when distribution or peer startup is unavailable.
 Once peers are running, connection, registration and synchronization failures
 fail the test in every mode.
 
+CI covers Gleam 1.16.0 / OTP 27.0 and Gleam 1.19.2 / OTP 29.1.2.
+Formatting and documentation checks run on the newer toolchain. Action
+revisions are pinned, with weekly update PRs managed by Dependabot.
+
 ## License
 
 MIT. See [LICENSE](./LICENSE).

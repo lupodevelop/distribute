@@ -7,22 +7,56 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DISTRIBUTE_REQUIRE_MULTINODE: "1"
+
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  compatibility:
+    name: Gleam ${{ matrix.gleam }} / OTP ${{ matrix.otp }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - otp: "27.0"
+            gleam: "1.16.0"
+            checks: false
+          - otp: "29.1.2"
+            gleam: "1.19.2"
+            checks: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: erlef/setup-beam@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          otp-version: "27.0"
-          gleam-version: "1.16.0"
-      - uses: actions/setup-node@v4
+          persist-credentials: false
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
-          node-version: "20"
+          otp-version: ${{ matrix.otp }}
+          gleam-version: ${{ matrix.gleam }}
+          version-type: strict
       - run: gleam deps download
+      - if: matrix.checks
+        run: gleam format --check src test
       - run: epmd -daemon
       - run: gleam test
+      - if: matrix.checks
+        run: gleam docs build
+
+  # Keep the existing required check name while covering both toolchains.
+  test:
+    if: ${{ always() }}
+    needs: compatibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Check compatibility results
         env:
-          DISTRIBUTE_REQUIRE_MULTINODE: "1"
-      - run: gleam format --check src test
-      - run: gleam docs build
+          COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
+        run: test "$COMPATIBILITY_RESULT" = success
